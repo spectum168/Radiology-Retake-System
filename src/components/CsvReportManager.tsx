@@ -225,6 +225,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
 
   // Comparison States
   const [selectedCompareMonths, setSelectedCompareMonths] = useState<string[]>([]);
+  const [selectedCompareShifts, setSelectedCompareShifts] = useState<string[]>(['เวรเช้า', 'เวรบ่าย', 'เวรดึก']);
   const [selectedCompareReasons, setSelectedCompareReasons] = useState<string[]>([]);
   const [compareChartType, setCompareChartType] = useState<'line' | 'bar'>('line');
 
@@ -779,7 +780,21 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
         reasons.add(r.rejectReason);
       }
     });
-    return Array.from(reasons).filter(Boolean).sort();
+    return Array.from(reasons)
+      .filter(reason => {
+        if (!reason) return false;
+        const trimmed = reason.trim();
+        // Remove empty, single dot, test (case insensitive), and unassigned labels
+        if (trimmed === '' || trimmed === '.' || trimmed.toLowerCase() === 'test' || trimmed === 'ไม่ระบุ') {
+          return false;
+        }
+        // Filter out strings with replacement char \uFFFD or garbage signs like ¾, ½, or unreadable chars
+        if (trimmed.includes('\uFFFD') || trimmed.includes('¾') || trimmed.includes('½')) {
+          return false;
+        }
+        return true;
+      })
+      .sort();
   }, [activeRecords]);
 
   // Auto-select months and reasons when activeRecords change
@@ -814,11 +829,31 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
   // Compile comparison chart data
   const comparisonChartData = useMemo(() => {
     const data = selectedCompareMonths.map(month => {
-      const monthRecords = activeRecords.filter(r => r.dateStr && r.dateStr.startsWith(month));
+      const monthRecords = activeRecords.filter(r => 
+        r.dateStr && 
+        r.dateStr.startsWith(month) && 
+        selectedCompareShifts.includes(r.shift)
+      );
+
+      const totalInMonth = monthRecords.length;
+      const morningRecords = monthRecords.filter(r => r.shift === 'เวรเช้า').length;
+      const afternoonRecords = monthRecords.filter(r => r.shift === 'เวรบ่าย').length;
+      const nightRecords = monthRecords.filter(r => r.shift === 'เวรดึก').length;
       
       const row: any = {
         month,
         monthLabel: formatThaiMonthShort(month),
+        totalInMonth,
+        shiftCounts: {
+          'เวรเช้า': morningRecords,
+          'เวรบ่าย': afternoonRecords,
+          'เวรดึก': nightRecords,
+        },
+        shiftPercentages: {
+          'เวรเช้า': totalInMonth > 0 ? ((morningRecords / totalInMonth) * 100).toFixed(1) + '%' : '0%',
+          'เวรบ่าย': totalInMonth > 0 ? ((afternoonRecords / totalInMonth) * 100).toFixed(1) + '%' : '0%',
+          'เวรดึก': totalInMonth > 0 ? ((nightRecords / totalInMonth) * 100).toFixed(1) + '%' : '0%',
+        }
       };
 
       selectedCompareReasons.forEach(reason => {
@@ -829,7 +864,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
     });
 
     return data.sort((a, b) => a.month.localeCompare(b.month));
-  }, [activeRecords, selectedCompareMonths, selectedCompareReasons]);
+  }, [activeRecords, selectedCompareMonths, selectedCompareReasons, selectedCompareShifts]);
 
   // Paginated records for table
   const paginatedRecords = useMemo(() => {
@@ -961,21 +996,31 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
         <Tooltip 
           content={({ active, payload }: any) => {
             if (active && payload && payload.length) {
+              const raw = payload[0].payload;
+              const morningVal = raw['เวรเช้า'] || 0;
+              const afternoonVal = raw['เวรบ่าย'] || 0;
+              const nightVal = raw['เวรดึก'] || 0;
+              const totalVal = raw.total || (morningVal + afternoonVal + nightVal) || 1;
+
+              const morningPct = ((morningVal / totalVal) * 100).toFixed(1) + '%';
+              const afternoonPct = ((afternoonVal / totalVal) * 100).toFixed(1) + '%';
+              const nightPct = ((nightVal / totalVal) * 100).toFixed(1) + '%';
+
               return (
                 <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
-                  <p className="font-bold mb-1 text-slate-200">{payload[0].payload.name}</p>
+                  <p className="font-bold mb-1 text-slate-200">{raw.name}</p>
                   <div className="space-y-1 mt-1.5">
                     <p className="text-blue-400 flex justify-between gap-4 text-[10px]">
-                      <span>เวรเช้า:</span> <span className="font-bold text-white">{payload[0].payload['เวรเช้า']} แผ่น</span>
+                      <span>เวรเช้า:</span> <span className="font-bold text-white">{morningVal} แผ่น ({morningPct})</span>
                     </p>
                     <p className="text-amber-400 flex justify-between gap-4 text-[10px]">
-                      <span>เวรบ่าย:</span> <span className="font-bold text-white">{payload[0].payload['เวรบ่าย']} แผ่น</span>
+                      <span>เวรบ่าย:</span> <span className="font-bold text-white">{afternoonVal} แผ่น ({afternoonPct})</span>
                     </p>
                     <p className="text-purple-400 flex justify-between gap-4 text-[10px]">
-                      <span>เวรดึก:</span> <span className="font-bold text-white">{payload[0].payload['เวรดึก']} แผ่น</span>
+                      <span>เวรดึก:</span> <span className="font-bold text-white">{nightVal} แผ่น ({nightPct})</span>
                     </p>
                     <p className="text-slate-300 border-t border-slate-800 pt-1 flex justify-between gap-4 font-bold mt-1 text-[10px]">
-                      <span>รวมทั้งหมด:</span> <span>{payload[0].payload.total} แผ่น</span>
+                      <span>รวมทั้งหมด:</span> <span>{totalVal} แผ่น</span>
                     </p>
                   </div>
                 </div>
@@ -1002,32 +1047,58 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
       );
     }
 
+    const CustomCompareTooltip = ({ active, payload }: any) => {
+      if (active && payload && payload.length) {
+        const rawPayload = payload[0].payload;
+        const shiftCounts = rawPayload.shiftCounts || { 'เวรเช้า': 0, 'เวรบ่าย': 0, 'เวรดึก': 0 };
+        const shiftPercentages = rawPayload.shiftPercentages || { 'เวรเช้า': '0%', 'เวรบ่าย': '0%', 'เวรดึก': '0%' };
+        const totalInMonth = rawPayload.totalInMonth || 0;
+
+        return (
+          <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800 min-w-[210px]">
+            <p className="font-bold mb-1 text-slate-200">{formatThaiMonth(rawPayload.month)}</p>
+            
+            <div className="space-y-1 mt-1.5 max-h-32 overflow-y-auto pr-1 border-b border-slate-800 pb-2 mb-2">
+              <p className="text-[10px] text-slate-400 font-semibold mb-1">แยกตามสาเหตุเสีย:</p>
+              {payload.map((p: any, i: number) => (
+                <p key={i} className="flex justify-between gap-4 text-[10px]" style={{ color: p.color }}>
+                  <span className="truncate max-w-[125px]">{p.name}:</span> 
+                  <span className="font-bold text-white">{p.value} แผ่น</span>
+                </p>
+              ))}
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-[10px] text-slate-400 font-semibold flex justify-between">
+                <span>สัดส่วนแยกตามเววร:</span>
+                <span className="text-slate-500">(รวม {totalInMonth} แผ่น)</span>
+              </p>
+              <p className="text-blue-400 flex justify-between gap-4 text-[10px]">
+                <span>เวรเช้า:</span> 
+                <span className="font-bold text-white">{shiftCounts['เวรเช้า']} แผ่น ({shiftPercentages['เวรเช้า']})</span>
+              </p>
+              <p className="text-amber-400 flex justify-between gap-4 text-[10px]">
+                <span>เวรบ่าย:</span> 
+                <span className="font-bold text-white">{shiftCounts['เวรบ่าย']} แผ่น ({shiftPercentages['เวรบ่าย']})</span>
+              </p>
+              <p className="text-purple-400 flex justify-between gap-4 text-[10px]">
+                <span>เวรดึก:</span> 
+                <span className="font-bold text-white">{shiftCounts['เวรดึก']} แผ่น ({shiftPercentages['เวรดึก']})</span>
+              </p>
+            </div>
+          </div>
+        );
+      }
+      return null;
+    };
+
     if (type === 'line') {
       return (
         <LineChart data={data} margin={{ top: 15, right: 15, left: -25, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
           <XAxis dataKey="monthLabel" tick={{ fontSize: 9, fill: '#64748B' }} stroke="#CBD5E1" />
           <YAxis tick={{ fontSize: 10, fill: '#64748B' }} stroke="#CBD5E1" />
-          <Tooltip 
-            content={({ active, payload }: any) => {
-              if (active && payload && payload.length) {
-                return (
-                  <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
-                    <p className="font-bold mb-1 text-slate-200">{formatThaiMonth(payload[0].payload.month)}</p>
-                    <div className="space-y-1 mt-1.5 max-h-48 overflow-y-auto pr-1">
-                      {payload.map((p: any, i: number) => (
-                        <p key={i} className="flex justify-between gap-4 text-[10px]" style={{ color: p.color }}>
-                          <span className="truncate max-w-[120px]">{p.name}:</span> 
-                          <span className="font-bold text-white">{p.value} แผ่น</span>
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            }}
-          />
+          <Tooltip content={<CustomCompareTooltip />} />
           <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
           {selectedCompareReasons.map((reason, index) => (
             <Line 
@@ -1048,26 +1119,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
           <XAxis dataKey="monthLabel" tick={{ fontSize: 9, fill: '#64748B' }} stroke="#CBD5E1" />
           <YAxis tick={{ fontSize: 10, fill: '#64748B' }} stroke="#CBD5E1" />
-          <Tooltip 
-            content={({ active, payload }: any) => {
-              if (active && payload && payload.length) {
-                return (
-                  <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
-                    <p className="font-bold mb-1 text-slate-200">{formatThaiMonth(payload[0].payload.month)}</p>
-                    <div className="space-y-1 mt-1.5 max-h-48 overflow-y-auto pr-1">
-                      {payload.map((p: any, i: number) => (
-                        <p key={i} className="flex justify-between gap-4 text-[10px]" style={{ color: p.color }}>
-                          <span className="truncate max-w-[120px]">{p.name}:</span> 
-                          <span className="font-bold text-white">{p.value} แผ่น</span>
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-                );
-              }
-              return null;
-            }}
-          />
+          <Tooltip content={<CustomCompareTooltip />} />
           <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
           {selectedCompareReasons.map((reason, index) => (
             <Bar 
@@ -1700,9 +1752,9 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
               </div>
 
               {/* Selection Controls Panel */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100 text-xs">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100 text-xs">
                 {/* Month Selection checkboxes */}
-                <div className="space-y-2">
+                <div className="space-y-2 lg:col-span-1">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
                       <CalendarDays size={12} className="text-blue-500" /> 1. เลือกช่วงเดือนที่เปรียบเทียบ
@@ -1734,7 +1786,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                                 prev.includes(month) ? prev.filter(m => m !== month) : [...prev, month]
                               );
                             }}
-                            className={`text-[9px] px-2.5 py-1.5 rounded-lg border font-semibold flex flex-col items-start gap-1 transition-all cursor-pointer ${
+                            className={`text-[9px] px-2.5 py-1.5 rounded-lg border font-semibold flex flex-col items-start gap-1 transition-all cursor-pointer w-full ${
                               isSelected
                                 ? 'bg-blue-50/80 border-blue-200 text-blue-700 shadow-xs'
                                 : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -1754,11 +1806,59 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                   )}
                 </div>
 
-                {/* Reason Selection checkboxes */}
-                <div className="lg:col-span-2 space-y-2">
+                {/* Shift Selection checkboxes */}
+                <div className="space-y-2 lg:col-span-1">
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
-                      <Activity size={12} className="text-emerald-500" /> 2. เลือกหัวข้อสาเหตุ (Reject Reasons)
+                      <Clock size={12} className="text-amber-500" /> 2. เลือกเวรทำงาน (Shifts)
+                    </span>
+                    <button 
+                      onClick={() => {
+                        if (selectedCompareShifts.length === 3) {
+                          setSelectedCompareShifts([]);
+                        } else {
+                          setSelectedCompareShifts(['เวรเช้า', 'เวรบ่าย', 'เวรดึก']);
+                        }
+                      }}
+                      className="text-[9px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                    >
+                      {selectedCompareShifts.length === 3 ? 'ล้างทั้งหมด' : 'เลือกทั้งหมด'}
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-[110px] overflow-y-auto pr-1">
+                    {['เวรเช้า', 'เวรบ่าย', 'เวรดึก'].map(shift => {
+                      const isSelected = selectedCompareShifts.includes(shift);
+                      return (
+                        <button
+                          key={shift}
+                          onClick={() => {
+                            setSelectedCompareShifts(prev => 
+                              prev.includes(shift) ? prev.filter(s => s !== shift) : [...prev, shift]
+                            );
+                          }}
+                          className={`text-[9px] px-2.5 py-1.5 rounded-lg border font-semibold flex items-center gap-1.5 transition-all cursor-pointer w-full ${
+                            isSelected
+                              ? 'bg-amber-50/80 border-amber-200 text-amber-800 shadow-xs'
+                              : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            isSelected 
+                              ? shift === 'เวรเช้า' ? 'bg-blue-500' : shift === 'เวรบ่าย' ? 'bg-amber-500' : 'bg-purple-500'
+                              : 'bg-slate-300'
+                          }`} />
+                          <span>{shift === 'เวรเช้า' ? 'เช้า (08:01-16:00)' : shift === 'เวรบ่าย' ? 'บ่าย (16:01-00:00)' : 'ดึก (00:01-08:00)'}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Reason Selection checkboxes */}
+                <div className="md:col-span-2 lg:col-span-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
+                      <Activity size={12} className="text-emerald-500" /> 3. เลือกหัวข้อสาเหตุ (Reject Reasons)
                     </span>
                     <button 
                       onClick={() => {
@@ -1810,6 +1910,53 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                   {renderComparisonChart(comparisonChartData, compareChartType)}
                 </ResponsiveContainer>
               </div>
+
+              {/* Glanceable Shift Percentages by Month table/grid */}
+              {comparisonChartData.length > 0 && (
+                <div className="mt-2 pt-3 border-t border-slate-100">
+                  <p className="text-[10px] font-bold text-slate-500 mb-2 uppercase tracking-wider flex items-center gap-1">
+                    <Clock size={12} className="text-amber-500" />
+                    สรุปสัดส่วนภาพเสียแต่ละเวร แยกตามรายเดือน (Monthly Shift Breakdown %)
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {comparisonChartData.map(item => {
+                      const shiftPercentages = item.shiftPercentages || { 'เวรเช้า': '0%', 'เวรบ่าย': '0%', 'เวรดึก': '0%' };
+                      const total = item.totalInMonth || 0;
+                      return (
+                        <div key={item.month} className="bg-slate-50/70 rounded-lg p-2 border border-slate-100 text-[10px]">
+                          <p className="font-bold text-slate-700 flex justify-between">
+                            <span>{formatThaiMonthShort(item.month)}</span>
+                            <span className="text-slate-500 font-normal">รวม {total} แผ่น</span>
+                          </p>
+                          <div className="mt-1 space-y-0.5 text-slate-600">
+                            <div className="flex justify-between">
+                              <span className="flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-blue-500" />
+                                เช้า:
+                              </span>
+                              <span className="font-bold text-blue-700">{shiftPercentages['เวรเช้า']}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-amber-500" />
+                                บ่าย:
+                              </span>
+                              <span className="font-bold text-amber-700">{shiftPercentages['เวรบ่าย']}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="flex items-center gap-1">
+                                <span className="w-1 h-1 rounded-full bg-purple-500" />
+                                ดึก:
+                              </span>
+                              <span className="font-bold text-purple-700">{shiftPercentages['เวรดึก']}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
           </div>
