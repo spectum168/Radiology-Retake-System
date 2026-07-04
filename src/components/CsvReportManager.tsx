@@ -44,7 +44,9 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  Radar
+  Radar,
+  LineChart,
+  Line
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -148,6 +150,49 @@ function parseCSVLine(line: string): string[] {
   return result.map(s => s.trim().replace(/^"|"$/g, ''));
 }
 
+// Format YYYY-MM to full Thai month and Buddhist Era year
+export function formatThaiMonth(yearMonthStr: string): string {
+  const [yearStr, monthStr] = yearMonthStr.split('-');
+  const yearCe = parseInt(yearStr, 10);
+  const yearBe = yearCe + 543;
+  const monthInt = parseInt(monthStr, 10);
+  
+  const thMonthNames = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+  ];
+  
+  return `${thMonthNames[monthInt - 1] || monthStr} พ.ศ. ${yearBe}`;
+}
+
+// Format YYYY-MM to short Thai month and Buddhist Era year
+export function formatThaiMonthShort(yearMonthStr: string): string {
+  const [yearStr, monthStr] = yearMonthStr.split('-');
+  const yearCe = parseInt(yearStr, 10);
+  const yearBe = (yearCe + 543) % 100;
+  const monthInt = parseInt(monthStr, 10);
+  
+  const thMonthShortNames = [
+    'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
+  ];
+  
+  return `${thMonthShortNames[monthInt - 1] || monthStr} ${yearBe}`;
+}
+
+const COMPARE_COLORS = [
+  '#2563EB', // Blue
+  '#EF4444', // Red
+  '#10B981', // Emerald
+  '#F59E0B', // Amber
+  '#8B5CF6', // Purple
+  '#EC4899', // Pink
+  '#06B6D4', // Cyan
+  '#F97316', // Orange
+  '#14B8A6', // Teal
+  '#6366F1', // Indigo
+];
+
 interface CsvReportManagerProps {
   token: string | null;
   onGoogleSignIn: () => Promise<void>;
@@ -176,7 +221,12 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
   const [reasonByShiftChartType, setReasonByShiftChartType] = useState<'stacked' | 'grouped'>('stacked');
 
   // Fullscreen overlay modal
-  const [fullscreenChart, setFullscreenChart] = useState<'reason' | 'bodyPart' | 'shift' | 'reasonByShift' | null>(null);
+  const [fullscreenChart, setFullscreenChart] = useState<'reason' | 'bodyPart' | 'shift' | 'reasonByShift' | 'comparison' | null>(null);
+
+  // Comparison States
+  const [selectedCompareMonths, setSelectedCompareMonths] = useState<string[]>([]);
+  const [selectedCompareReasons, setSelectedCompareReasons] = useState<string[]>([]);
+  const [compareChartType, setCompareChartType] = useState<'line' | 'bar'>('line');
 
   // Google Drive states
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
@@ -677,6 +727,110 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
     return data.sort((a, b) => b.total - a.total).slice(0, 6);
   }, [filteredRecords]);
 
+  // Extract all unique months from activeRecords
+  const uniqueMonths = useMemo(() => {
+    const months = new Set<string>();
+    activeRecords.forEach(r => {
+      if (r.dateStr) {
+        const match = r.dateStr.match(/^(\d{4}-\d{2})/);
+        if (match) {
+          months.add(match[1]);
+        }
+      }
+    });
+    return Array.from(months).sort();
+  }, [activeRecords]);
+
+  // Pre-calculate reject rates for each unique month based on active files
+  const monthRejectRates = useMemo(() => {
+    const rates: Record<string, string> = {};
+    uniqueMonths.forEach(monthStr => {
+      const activeFilesWithMonth = files.filter(f => 
+        f.isActive && f.records.some(r => r.dateStr && r.dateStr.startsWith(monthStr))
+      );
+
+      let totalScanned = 0;
+      let rejected = 0;
+      let hasSummary = false;
+
+      activeFilesWithMonth.forEach(f => {
+        if (f.summary) {
+          hasSummary = true;
+          totalScanned += f.summary.totalImages;
+          rejected += f.summary.rejectedImages;
+        }
+      });
+
+      if (!hasSummary || totalScanned === 0) {
+        rates[monthStr] = 'N/A';
+      } else {
+        const rate = (rejected / totalScanned) * 100;
+        rates[monthStr] = rate.toFixed(2) + '%';
+      }
+    });
+    return rates;
+  }, [uniqueMonths, files]);
+
+  // Extract all unique reasons from activeRecords
+  const uniqueReasons = useMemo(() => {
+    const reasons = new Set<string>();
+    activeRecords.forEach(r => {
+      if (r.rejectReason) {
+        reasons.add(r.rejectReason);
+      }
+    });
+    return Array.from(reasons).filter(Boolean).sort();
+  }, [activeRecords]);
+
+  // Auto-select months and reasons when activeRecords change
+  useEffect(() => {
+    if (uniqueMonths.length > 0) {
+      setSelectedCompareMonths(prev => {
+        if (prev.length === 0) return uniqueMonths;
+        return prev.filter(m => uniqueMonths.includes(m));
+      });
+    } else {
+      setSelectedCompareMonths([]);
+    }
+  }, [uniqueMonths]);
+
+  useEffect(() => {
+    if (uniqueReasons.length > 0) {
+      setSelectedCompareReasons(prev => {
+        if (prev.length === 0) {
+          const sortedByCount = uniqueReasons.map(reason => {
+            const count = activeRecords.filter(r => r.rejectReason === reason).length;
+            return { reason, count };
+          }).sort((a, b) => b.count - a.count);
+          return sortedByCount.slice(0, 5).map(x => x.reason);
+        }
+        return prev.filter(r => uniqueReasons.includes(r));
+      });
+    } else {
+      setSelectedCompareReasons([]);
+    }
+  }, [uniqueReasons, activeRecords]);
+
+  // Compile comparison chart data
+  const comparisonChartData = useMemo(() => {
+    const data = selectedCompareMonths.map(month => {
+      const monthRecords = activeRecords.filter(r => r.dateStr && r.dateStr.startsWith(month));
+      
+      const row: any = {
+        month,
+        monthLabel: formatThaiMonthShort(month),
+      };
+
+      selectedCompareReasons.forEach(reason => {
+        row[reason] = monthRecords.filter(r => r.rejectReason === reason).length;
+      });
+
+      return row;
+    });
+
+    return data.sort((a, b) => a.month.localeCompare(b.month));
+  }, [activeRecords, selectedCompareMonths, selectedCompareReasons]);
+
   // Paginated records for table
   const paginatedRecords = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -836,6 +990,96 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
         <Bar dataKey="เวรดึก" stackId={isStacked ? "a" : undefined} fill="#8B5CF6" radius={isStacked ? [3, 3, 0, 0] : [3, 3, 0, 0]} />
       </BarChart>
     );
+  };
+
+  const renderComparisonChart = (data: any[], type: 'line' | 'bar') => {
+    if (data.length === 0 || selectedCompareReasons.length === 0 || selectedCompareMonths.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-slate-400 py-10">
+          <Info size={16} className="mb-2 text-slate-300" />
+          <p className="text-xs">กรุณาเลือกข้อมูลเดือนและสาเหตุการเสียเพื่อเปรียบเทียบเชิงสถิติ</p>
+        </div>
+      );
+    }
+
+    if (type === 'line') {
+      return (
+        <LineChart data={data} margin={{ top: 15, right: 15, left: -25, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+          <XAxis dataKey="monthLabel" tick={{ fontSize: 9, fill: '#64748B' }} stroke="#CBD5E1" />
+          <YAxis tick={{ fontSize: 10, fill: '#64748B' }} stroke="#CBD5E1" />
+          <Tooltip 
+            content={({ active, payload }: any) => {
+              if (active && payload && payload.length) {
+                return (
+                  <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
+                    <p className="font-bold mb-1 text-slate-200">{formatThaiMonth(payload[0].payload.month)}</p>
+                    <div className="space-y-1 mt-1.5 max-h-48 overflow-y-auto pr-1">
+                      {payload.map((p: any, i: number) => (
+                        <p key={i} className="flex justify-between gap-4 text-[10px]" style={{ color: p.color }}>
+                          <span className="truncate max-w-[120px]">{p.name}:</span> 
+                          <span className="font-bold text-white">{p.value} แผ่น</span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
+          {selectedCompareReasons.map((reason, index) => (
+            <Line 
+              key={reason} 
+              type="monotone" 
+              dataKey={reason} 
+              stroke={COMPARE_COLORS[index % COMPARE_COLORS.length]} 
+              strokeWidth={2}
+              activeDot={{ r: 6 }} 
+              dot={{ r: 4 }}
+            />
+          ))}
+        </LineChart>
+      );
+    } else {
+      return (
+        <BarChart data={data} margin={{ top: 15, right: 15, left: -25, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+          <XAxis dataKey="monthLabel" tick={{ fontSize: 9, fill: '#64748B' }} stroke="#CBD5E1" />
+          <YAxis tick={{ fontSize: 10, fill: '#64748B' }} stroke="#CBD5E1" />
+          <Tooltip 
+            content={({ active, payload }: any) => {
+              if (active && payload && payload.length) {
+                return (
+                  <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
+                    <p className="font-bold mb-1 text-slate-200">{formatThaiMonth(payload[0].payload.month)}</p>
+                    <div className="space-y-1 mt-1.5 max-h-48 overflow-y-auto pr-1">
+                      {payload.map((p: any, i: number) => (
+                        <p key={i} className="flex justify-between gap-4 text-[10px]" style={{ color: p.color }}>
+                          <span className="truncate max-w-[120px]">{p.name}:</span> 
+                          <span className="font-bold text-white">{p.value} แผ่น</span>
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            }}
+          />
+          <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
+          {selectedCompareReasons.map((reason, index) => (
+            <Bar 
+              key={reason} 
+              dataKey={reason} 
+              fill={COMPARE_COLORS[index % COMPARE_COLORS.length]} 
+              radius={[3, 3, 0, 0]}
+            />
+          ))}
+        </BarChart>
+      );
+    }
   };
 
   return (
@@ -1418,6 +1662,156 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
               </div>
             </div>
 
+            {/* Chart 5: Interactive Monthly Comparison & Trend Section */}
+            <div className="md:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col space-y-4">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-3">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5 uppercase tracking-wider">
+                    <TrendingUp size={14} className="text-indigo-600" />
+                    วิเคราะห์เปรียบเทียบแนวโน้มภาพเสียรายเดือน (Monthly Trend Comparison)
+                  </h4>
+                  <p className="text-[10px] text-slate-400">เปรียบเทียบสถิติและวิเคราะห์สัดส่วนภาพเสียจำแนกตามรายเดือนและสาเหตุความผิดพลาดหลัก</p>
+                </div>
+                
+                <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                  <div className="flex bg-slate-100 rounded-lg p-0.5">
+                    {(['line', 'bar'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setCompareChartType(type)}
+                        className={`text-[9px] px-2 py-1 rounded-md font-bold capitalize transition-all ${
+                          compareChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'line' ? 'กราฟเส้นแนวโน้ม' : 'กราฟแท่งเปรียบเทียบ'}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setFullscreenChart('comparison')}
+                    className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-all border border-slate-100 cursor-pointer"
+                    title="ขยายใหญ่เต็มจอ"
+                  >
+                    <Maximize2 size={12} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Selection Controls Panel */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 bg-slate-50/50 p-4 rounded-xl border border-slate-100 text-xs">
+                {/* Month Selection checkboxes */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
+                      <CalendarDays size={12} className="text-blue-500" /> 1. เลือกช่วงเดือนที่เปรียบเทียบ
+                    </span>
+                    <button 
+                      onClick={() => {
+                        if (selectedCompareMonths.length === uniqueMonths.length) {
+                          setSelectedCompareMonths([]);
+                        } else {
+                          setSelectedCompareMonths(uniqueMonths);
+                        }
+                      }}
+                      className="text-[9px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                    >
+                      {selectedCompareMonths.length === uniqueMonths.length ? 'ล้างทั้งหมด' : 'เลือกทั้งหมด'}
+                    </button>
+                  </div>
+                  {uniqueMonths.length === 0 ? (
+                    <p className="text-[9px] text-slate-400 italic">ไม่มีข้อมูลเดือนที่วิเคราะห์ได้</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 max-h-[110px] overflow-y-auto pr-1">
+                      {uniqueMonths.map(month => {
+                        const isSelected = selectedCompareMonths.includes(month);
+                        return (
+                          <button
+                            key={month}
+                            onClick={() => {
+                              setSelectedCompareMonths(prev => 
+                                prev.includes(month) ? prev.filter(m => m !== month) : [...prev, month]
+                              );
+                            }}
+                            className={`text-[9px] px-2.5 py-1.5 rounded-lg border font-semibold flex flex-col items-start gap-1 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-blue-50/80 border-blue-200 text-blue-700 shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1">
+                              <span className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-600' : 'bg-slate-300'}`} />
+                              <span>{formatThaiMonthShort(month)}</span>
+                            </div>
+                            <span className={`text-[8px] pl-2.5 font-bold ${isSelected ? 'text-amber-600' : 'text-amber-500/80'}`}>
+                              เสีย: {monthRejectRates[month] || 'N/A'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Reason Selection checkboxes */}
+                <div className="lg:col-span-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 uppercase">
+                      <Activity size={12} className="text-emerald-500" /> 2. เลือกหัวข้อสาเหตุ (Reject Reasons)
+                    </span>
+                    <button 
+                      onClick={() => {
+                        if (selectedCompareReasons.length === uniqueReasons.length) {
+                          setSelectedCompareReasons([]);
+                        } else {
+                          setSelectedCompareReasons(uniqueReasons);
+                        }
+                      }}
+                      className="text-[9px] font-bold text-blue-600 hover:text-blue-800 cursor-pointer"
+                    >
+                      {selectedCompareReasons.length === uniqueReasons.length ? 'ล้างทั้งหมด' : 'เลือกทั้งหมด'}
+                    </button>
+                  </div>
+                  {uniqueReasons.length === 0 ? (
+                    <p className="text-[9px] text-slate-400 italic">ไม่มีข้อมูลหัวข้อที่วิเคราะห์ได้</p>
+                  ) : (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[110px] overflow-y-auto pr-1">
+                      {uniqueReasons.map(reason => {
+                        const isSelected = selectedCompareReasons.includes(reason);
+                        return (
+                          <button
+                            key={reason}
+                            onClick={() => {
+                              setSelectedCompareReasons(prev => 
+                                prev.includes(reason) ? prev.filter(r => r !== reason) : [...prev, reason]
+                              );
+                            }}
+                            className={`text-[9px] px-2 py-1 rounded-md border text-left truncate flex items-center gap-1.5 transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-semibold shadow-xs'
+                                : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                            }`}
+                            title={reason}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isSelected ? 'bg-emerald-600' : 'bg-slate-300'}`} />
+                            <span className="truncate">{reason}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Chart Plot Container */}
+              <div className="h-[280px] w-full min-h-0 pt-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  {renderComparisonChart(comparisonChartData, compareChartType)}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
           </div>
 
           {/* Fullscreen Overlays for CSV Charts */}
@@ -1433,12 +1827,14 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                       {fullscreenChart === 'bodyPart' && <><TrendingUp size={18} className="text-blue-600" /> ส่วนของร่างกายที่ถ่ายตรวจเสีย (Body Part)</>}
                       {fullscreenChart === 'shift' && <><Clock size={18} className="text-blue-600" /> แบ่งตามเวรการทำงาน (Shift Breakdown)</>}
                       {fullscreenChart === 'reasonByShift' && <><Clock size={18} className="text-blue-600" /> เปรียบเทียบสาเหตุเสียแยกตามเวร (Reasons by Shift)</>}
+                      {fullscreenChart === 'comparison' && <><TrendingUp size={18} className="text-indigo-600" /> วิเคราะห์เปรียบเทียบและแนวโน้มรายเดือน (Monthly Comparison)</>}
                     </h4>
                     <p className="text-[10px] text-slate-500 mt-0.5">
                       {fullscreenChart === 'reason' && 'แสดงสัดส่วนสาเหตุและสถิติข้อผิดพลาดหลัก'}
                       {fullscreenChart === 'bodyPart' && 'จัดสัดส่วนอวัยวะหรือท่าตรวจที่ถ่ายเสียบ่อยที่สุด'}
                       {fullscreenChart === 'shift' && 'แสดงการแจกแจงแบ่งกลุ่มเวลากะงานเช้า บ่าย และดึก'}
                       {fullscreenChart === 'reasonByShift' && 'เปรียบเทียบสัดส่วนสาเหตุการถ่ายฟิล์มเสียจำแนกตามแต่ละเวรทำงาน'}
+                      {fullscreenChart === 'comparison' && 'วิเคราะห์เปรียบเทียบและแนวโน้มความสัมพันธ์ระหว่างข้อมูลฟิล์มเสียแบบรายเดือน'}
                     </p>
                   </div>
                   
@@ -1515,6 +1911,24 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                       </div>
                     )}
 
+                    {fullscreenChart === 'comparison' && (
+                      <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                        {(['line', 'bar'] as const).map(type => (
+                          <button
+                            key={type}
+                            onClick={() => setCompareChartType(type)}
+                            className={`text-xs px-2.5 py-1 rounded-md font-semibold transition-all ${
+                              compareChartType === type
+                                ? 'bg-white text-slate-800 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            {type === 'line' ? 'กราฟเส้นแนวโน้ม' : 'กราฟแท่งเปรียบเทียบ'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <button
                       onClick={() => setFullscreenChart(null)}
                       className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center gap-1 text-xs font-semibold border border-slate-200 shadow-sm cursor-pointer"
@@ -1532,6 +1946,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                     {fullscreenChart === 'bodyPart' && renderChart(bodyPartChartData, bodyPartChartType, 'value', 'name', '#34D399')}
                     {fullscreenChart === 'shift' && renderChart(shiftChartData, shiftChartType, 'value', 'name', '#F59E0B')}
                     {fullscreenChart === 'reasonByShift' && renderShiftStackedChart(reasonByShiftData, reasonByShiftChartType === 'stacked')}
+                    {fullscreenChart === 'comparison' && renderComparisonChart(comparisonChartData, compareChartType)}
                   </ResponsiveContainer>
                 </div>
               </div>
