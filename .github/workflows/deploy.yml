@@ -30,6 +30,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Create fallback Firebase config if missing
+        run: |
+          if [ ! -f firebase-applet-config.json ]; then
+            echo '{"projectId":"","appId":"","apiKey":"","authDomain":"","storageBucket":"","messagingSenderId":""}' > firebase-applet-config.json
+          fi
+
       - name: Build
         run: npm run build
 
