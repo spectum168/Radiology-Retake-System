@@ -276,27 +276,25 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      const file = e.dataTransfer.files[0];
-      if (file.name.endsWith('.csv')) {
-        await processFile(file);
-      } else {
-        setErrorMsg('กรุณาเลือกเฉพาะไฟล์สกุล .csv เท่านั้น');
-      }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFiles = Array.from(e.dataTransfer.files) as File[];
+      await processMultipleFiles(droppedFiles);
     }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setErrorMsg(null);
     setSuccessMsg(null);
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      await processFile(file);
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files) as File[];
+      await processMultipleFiles(selectedFiles);
+      // Reset input value so the same files can be re-selected if needed
+      e.target.value = '';
     }
   };
 
-  // Core processing logic
-  const parseAndAddCsvContent = (text: string, fileName: string) => {
+  // Core processing logic returning a parsed UploadedCsvFile object
+  const parseCsvContent = (text: string, fileName: string): UploadedCsvFile => {
     const rawLines = text.split(/\r?\n/).map(line => line.trim());
     if (rawLines.length === 0) throw new Error('ไฟล์ว่างเปล่าไม่มีข้อมูล');
 
@@ -422,7 +420,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
       // STRICT SECURITY EXCLUSION:
       // Do NOT extract/store User Name, Patient Name, Accession Number.
       parsedRecords.push({
-        id: `csv-${idx}-${Date.now()}`,
+        id: `csv-${idx}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
         dateTimeStr: rawDateTime,
         dateStr,
         timeStr,
@@ -440,41 +438,70 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
       throw new Error('ไม่พบข้อมูลบันทึกข้อผิดพลาดในไฟล์นี้');
     }
 
-    const newUploadedFile: UploadedCsvFile = {
-      id: `file-${Date.now()}`,
+    return {
+      id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       fileName,
       uploadDate: new Date().toLocaleString('th-TH'),
       summary,
       records: parsedRecords,
       isActive: true
     };
-
-    const updatedFiles = [newUploadedFile, ...files];
-    saveFiles(updatedFiles);
-    setSuccessMsg(`นำเข้าไฟล์ "${fileName}" สำเร็จ! ตรวจพบข้อมูลเสีย ${parsedRecords.length} รายการ`);
-
-    // Update default date range filters from the new file data
-    const dates = parsedRecords.map(r => r.dateStr).filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/));
-    if (dates.length > 0) {
-      const sorted = [...dates].sort();
-      if (!startDate || sorted[0] < startDate) setStartDate(sorted[0]);
-      if (!endDate || sorted[sorted.length - 1] > endDate) setEndDate(sorted[sorted.length - 1]);
-    }
   };
 
-  const processFile = async (file: File) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
+  const processMultipleFiles = async (filesList: File[]) => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    const csvFiles = filesList.filter(file => file.name.endsWith('.csv'));
+    if (csvFiles.length === 0) {
+      setErrorMsg('กรุณาเลือกเฉพาะไฟล์ที่มีนามสกุล .csv เท่านั้น');
+      return;
+    }
+
+    const newlyParsedFiles: UploadedCsvFile[] = [];
+    const errors: string[] = [];
+
+    // Process all files
+    for (const file of csvFiles) {
       try {
-        const text = e.target?.result as string;
-        if (!text) throw new Error('ไม่สามารถอ่านเนื้อหาไฟล์ได้');
-        parseAndAddCsvContent(text, file.name);
+        const text = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result as string || '');
+          reader.onerror = () => reject(new Error(`ไม่สามารถอ่านไฟล์ ${file.name} ได้`));
+          reader.readAsText(file);
+        });
+
+        const parsedFile = parseCsvContent(text, file.name);
+        newlyParsedFiles.push(parsedFile);
       } catch (err: any) {
-        console.error('CSV Parsing Error:', err);
-        setErrorMsg(err.message || 'เกิดข้อผิดพลาดในการแยกวิเคราะห์ข้อมูล CSV กรุณาตรวจสอบว่าข้อมูลถูกต้อง');
+        console.error(`Error processing file ${file.name}:`, err);
+        errors.push(`${file.name}: ${err.message || 'รูปแบบไฟล์ไม่ถูกต้อง'}`);
       }
-    };
-    reader.readAsText(file);
+    }
+
+    if (newlyParsedFiles.length > 0) {
+      setFiles(prev => {
+        const updated = [...newlyParsedFiles, ...prev];
+        localStorage.setItem('radiology_uploaded_csv_files', JSON.stringify(updated));
+        return updated;
+      });
+
+      // Aggregate messages
+      const totalRecords = newlyParsedFiles.reduce((sum, f) => sum + f.records.length, 0);
+      setSuccessMsg(`นำเข้าสำเร็จทั้งหมด ${newlyParsedFiles.length} ไฟล์! ตรวจพบข้อมูลเสียรวม ${totalRecords} รายการ`);
+
+      // Update date range
+      const allDates = newlyParsedFiles.flatMap(f => f.records.map(r => r.dateStr)).filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/));
+      if (allDates.length > 0) {
+        const sorted = [...allDates].sort();
+        if (!startDate || sorted[0] < startDate) setStartDate(sorted[0]);
+        if (!endDate || sorted[sorted.length - 1] > endDate) setEndDate(sorted[sorted.length - 1]);
+      }
+    }
+
+    if (errors.length > 0) {
+      setErrorMsg(`เกิดข้อผิดพลาดในการนำเข้าบางไฟล์:\n${errors.join('\n')}`);
+    }
   };
 
   // Google Drive: Fetch files lists
@@ -531,7 +558,22 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
       }
 
       const text = await res.text();
-      parseAndAddCsvContent(text, fileName);
+      const parsedFile = parseCsvContent(text, fileName);
+      
+      setFiles(prev => {
+        const updated = [parsedFile, ...prev];
+        localStorage.setItem('radiology_uploaded_csv_files', JSON.stringify(updated));
+        return updated;
+      });
+      setSuccessMsg(`นำเข้าไฟล์ "${fileName}" สำเร็จ! ตรวจพบข้อมูลเสีย ${parsedFile.records.length} รายการ`);
+
+      // Update default date range filters from the new file data
+      const dates = parsedFile.records.map(r => r.dateStr).filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/));
+      if (dates.length > 0) {
+        const sorted = [...dates].sort();
+        if (!startDate || sorted[0] < startDate) setStartDate(sorted[0]);
+        if (!endDate || sorted[sorted.length - 1] > endDate) setEndDate(sorted[sorted.length - 1]);
+      }
       setIsDriveModalOpen(false);
     } catch (err: any) {
       console.error('Drive download error:', err);
@@ -1222,6 +1264,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
               ref={fileInputRef}
               onChange={handleFileSelect}
               accept=".csv"
+              multiple
               className="hidden"
             />
           </div>
