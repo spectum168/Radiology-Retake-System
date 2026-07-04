@@ -173,9 +173,10 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
   const [reasonChartType, setReasonChartType] = useState<'bar' | 'pie' | 'radar'>('bar');
   const [bodyPartChartType, setBodyPartChartType] = useState<'bar' | 'pie' | 'radar'>('bar');
   const [shiftChartType, setShiftChartType] = useState<'pie' | 'bar'>('pie');
+  const [reasonByShiftChartType, setReasonByShiftChartType] = useState<'stacked' | 'grouped'>('stacked');
 
   // Fullscreen overlay modal
-  const [fullscreenChart, setFullscreenChart] = useState<'reason' | 'bodyPart' | 'shift' | null>(null);
+  const [fullscreenChart, setFullscreenChart] = useState<'reason' | 'bodyPart' | 'shift' | 'reasonByShift' | null>(null);
 
   // Google Drive states
   const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
@@ -652,6 +653,30 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
       }));
   }, [filteredRecords]);
 
+  // Aggregate Reason breakdown by Shift (grouped/stacked bar chart)
+  const reasonByShiftData = useMemo(() => {
+    // Get unique reject reasons from filtered records
+    const reasons = Array.from(new Set(filteredRecords.map(r => r.rejectReason))).filter(Boolean);
+    
+    // For each reason, calculate counts in each shift
+    const data = reasons.map(reason => {
+      const recordsForReason = filteredRecords.filter(r => r.rejectReason === reason);
+      const morning = recordsForReason.filter(r => r.shift === 'เวรเช้า').length;
+      const afternoon = recordsForReason.filter(r => r.shift === 'เวรบ่าย').length;
+      const night = recordsForReason.filter(r => r.shift === 'เวรดึก').length;
+      return {
+        name: reason,
+        'เวรเช้า': morning,
+        'เวรบ่าย': afternoon,
+        'เวรดึก': night,
+        total: morning + afternoon + night
+      };
+    });
+
+    // Sort by total rejects descending and take top 6 reasons to avoid clutter
+    return data.sort((a, b) => b.total - a.total).slice(0, 6);
+  }, [filteredRecords]);
+
   // Paginated records for table
   const paginatedRecords = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -762,6 +787,55 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
           </BarChart>
         );
     }
+  };
+
+  const renderShiftStackedChart = (data: any[], isStacked: boolean) => {
+    if (data.length === 0) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-slate-400 py-10">
+          <Info size={24} className="mb-2 text-slate-300" />
+          <p className="text-xs">ไม่มีข้อมูลให้วิเคราะห์สำหรับช่วงเวลานี้</p>
+        </div>
+      );
+    }
+
+    return (
+      <BarChart data={data} margin={{ top: 15, right: 15, left: -25, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+        <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#64748B' }} stroke="#CBD5E1" />
+        <YAxis tick={{ fontSize: 10, fill: '#64748B' }} stroke="#CBD5E1" />
+        <Tooltip 
+          content={({ active, payload }) => {
+            if (active && payload && payload.length) {
+              return (
+                <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
+                  <p className="font-bold mb-1 text-slate-200">{payload[0].payload.name}</p>
+                  <div className="space-y-1 mt-1.5">
+                    <p className="text-blue-400 flex justify-between gap-4 text-[10px]">
+                      <span>เวรเช้า:</span> <span className="font-bold text-white">{payload[0].payload['เวรเช้า']} แผ่น</span>
+                    </p>
+                    <p className="text-amber-400 flex justify-between gap-4 text-[10px]">
+                      <span>เวรบ่าย:</span> <span className="font-bold text-white">{payload[0].payload['เวรบ่าย']} แผ่น</span>
+                    </p>
+                    <p className="text-purple-400 flex justify-between gap-4 text-[10px]">
+                      <span>เวรดึก:</span> <span className="font-bold text-white">{payload[0].payload['เวรดึก']} แผ่น</span>
+                    </p>
+                    <p className="text-slate-300 border-t border-slate-800 pt-1 flex justify-between gap-4 font-bold mt-1 text-[10px]">
+                      <span>รวมทั้งหมด:</span> <span>{payload[0].payload.total} แผ่น</span>
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          }}
+        />
+        <Legend verticalAlign="top" height={36} iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '10px' }} />
+        <Bar dataKey="เวรเช้า" stackId={isStacked ? "a" : undefined} fill="#2563EB" radius={isStacked ? [0, 0, 0, 0] : [3, 3, 0, 0]} />
+        <Bar dataKey="เวรบ่าย" stackId={isStacked ? "a" : undefined} fill="#F59E0B" radius={isStacked ? [0, 0, 0, 0] : [3, 3, 0, 0]} />
+        <Bar dataKey="เวรดึก" stackId={isStacked ? "a" : undefined} fill="#8B5CF6" radius={isStacked ? [3, 3, 0, 0] : [3, 3, 0, 0]} />
+      </BarChart>
+    );
   };
 
   return (
@@ -1166,7 +1240,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
           )}
 
           {/* Visual Charts Layout */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
             {/* Chart 1: Reject Reason Breakdown */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-[350px]">
@@ -1257,7 +1331,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
             </div>
 
             {/* Chart 3: Shift Breakdown */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-[350px] md:col-span-2 lg:col-span-1">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-[350px]">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
@@ -1300,6 +1374,50 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
               </div>
             </div>
 
+            {/* Chart 4: Reject Reasons by Work Shift */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 flex flex-col h-[350px]">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <Clock size={14} className="text-blue-500" />
+                    เปรียบเทียบสาเหตุเสียแยกตามเวร (Reasons by Shift)
+                  </h4>
+                  <p className="text-[10px] text-slate-400">สัดส่วนสาเหตุถ่ายฟิล์มเสียจำแนกตามแต่ละเวรทำงาน</p>
+                </div>
+                
+                <div className="flex items-center gap-1.5">
+                  <div className="flex bg-slate-100 rounded-lg p-0.5">
+                    {(['stacked', 'grouped'] as const).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setReasonByShiftChartType(type)}
+                        className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold capitalize transition-all ${
+                          reasonByShiftChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'stacked' ? 'ซ้อนกัน' : 'เรียงกัน'}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setFullscreenChart('reasonByShift')}
+                    className="p-1 hover:bg-slate-100 rounded text-slate-400 hover:text-slate-600 transition-all border border-slate-100"
+                    title="ขยายใหญ่เต็มจอ"
+                  >
+                    <Maximize2 size={12} />
+                  </button>
+                </div>
+              </div>
+              
+              <div className="flex-1 w-full min-h-0">
+                <ResponsiveContainer width="100%" height="100%">
+                  {renderShiftStackedChart(reasonByShiftData, reasonByShiftChartType === 'stacked')}
+                </ResponsiveContainer>
+              </div>
+            </div>
+
           </div>
 
           {/* Fullscreen Overlays for CSV Charts */}
@@ -1314,11 +1432,13 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                       {fullscreenChart === 'reason' && <><Activity size={18} className="text-blue-600" /> สาเหตุการถ่ายภาพเสีย (Reject Reason)</>}
                       {fullscreenChart === 'bodyPart' && <><TrendingUp size={18} className="text-blue-600" /> ส่วนของร่างกายที่ถ่ายตรวจเสีย (Body Part)</>}
                       {fullscreenChart === 'shift' && <><Clock size={18} className="text-blue-600" /> แบ่งตามเวรการทำงาน (Shift Breakdown)</>}
+                      {fullscreenChart === 'reasonByShift' && <><Clock size={18} className="text-blue-600" /> เปรียบเทียบสาเหตุเสียแยกตามเวร (Reasons by Shift)</>}
                     </h4>
                     <p className="text-[10px] text-slate-500 mt-0.5">
                       {fullscreenChart === 'reason' && 'แสดงสัดส่วนสาเหตุและสถิติข้อผิดพลาดหลัก'}
                       {fullscreenChart === 'bodyPart' && 'จัดสัดส่วนอวัยวะหรือท่าตรวจที่ถ่ายเสียบ่อยที่สุด'}
                       {fullscreenChart === 'shift' && 'แสดงการแจกแจงแบ่งกลุ่มเวลากะงานเช้า บ่าย และดึก'}
+                      {fullscreenChart === 'reasonByShift' && 'เปรียบเทียบสัดส่วนสาเหตุการถ่ายฟิล์มเสียจำแนกตามแต่ละเวรทำงาน'}
                     </p>
                   </div>
                   
@@ -1377,6 +1497,24 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                       </div>
                     )}
 
+                    {fullscreenChart === 'reasonByShift' && (
+                      <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                        {(['stacked', 'grouped'] as const).map(type => (
+                          <button
+                            key={type}
+                            onClick={() => setReasonByShiftChartType(type)}
+                            className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                              reasonByShiftChartType === type
+                                ? 'bg-white text-slate-800 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-800'
+                            }`}
+                          >
+                            {type === 'stacked' ? 'ซ้อนกัน' : 'เรียงกัน'}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     <button
                       onClick={() => setFullscreenChart(null)}
                       className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center gap-1 text-xs font-semibold border border-slate-200 shadow-sm cursor-pointer"
@@ -1393,6 +1531,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
                     {fullscreenChart === 'reason' && renderChart(reasonChartData, reasonChartType, 'value', 'name', '#2563EB')}
                     {fullscreenChart === 'bodyPart' && renderChart(bodyPartChartData, bodyPartChartType, 'value', 'name', '#34D399')}
                     {fullscreenChart === 'shift' && renderChart(shiftChartData, shiftChartType, 'value', 'name', '#F59E0B')}
+                    {fullscreenChart === 'reasonByShift' && renderShiftStackedChart(reasonByShiftData, reasonByShiftChartType === 'stacked')}
                   </ResponsiveContainer>
                 </div>
               </div>
