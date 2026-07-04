@@ -1,0 +1,6 @@
+{
+  "name": "X-Ray Reject Dashboard",
+  "description": "แดชบอร์ดวิเคราะห์และจัดการข้อมูลการถ่ายภาพรังสีเสีย ดึงข้อมูลและตั้งค่าผ่าน Google Sheets แบบเรียลไทม์",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
