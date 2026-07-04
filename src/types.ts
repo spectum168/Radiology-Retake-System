@@ -35,14 +35,17 @@ export interface FilterState {
 /**
  * Detect headers and map columns dynamically
  */
-export function parseRejectRecords(rows: string[][]): RejectRecord[] {
+export function parseRejectRecords(rows: string[][], settings?: SettingsConfig): RejectRecord[] {
   if (rows.length === 0) return [];
 
-  // Find header row (usually row 0, but let's check first 3 rows in case of empty rows or metadata)
+  // Filter out completely empty rows at the top first to locate header properly
+  const cleanRows = rows.filter(row => row.length > 0 && row.some(cell => cell.trim() !== ''));
+  if (cleanRows.length === 0) return [];
+
+  // Find header row (usually row 0, but check first few rows)
   let headerIndex = -1;
-  for (let i = 0; i < Math.min(5, rows.length); i++) {
-    const r = rows[i];
-    // A valid header row should contain keywords of our data
+  for (let i = 0; i < Math.min(5, cleanRows.length); i++) {
+    const r = cleanRows[i];
     const hasDate = r.some(cell => /วัน|เวลา|date|time/i.test(cell));
     const hasStaff = r.some(cell => /เจ้าหน้าที่|ชื่อ|ผู้ถ่าย|ผู้ตรวจ|staff|name/i.test(cell));
     if (hasDate || hasStaff) {
@@ -51,24 +54,123 @@ export function parseRejectRecords(rows: string[][]): RejectRecord[] {
     }
   }
 
-  // If no header found, assume row 0
   if (headerIndex === -1) {
     headerIndex = 0;
   }
 
-  const headers = rows[headerIndex].map(h => h.trim());
-  const dataRows = rows.slice(headerIndex + 1);
+  const headers = cleanRows[headerIndex].map(h => h.trim());
+  const dataRows = cleanRows.slice(headerIndex + 1);
 
-  // Map header indexes
+  // Map header indexes using regex
   const colIndex = {
     date: headers.findIndex(h => /วัน|เวลา|date|time/i.test(h)),
-    staff: headers.findIndex(h => /เจ้าหน้าที่|ชื่อ|ผู้ถ่าย|ผู้ตรวจ|staff|name/i.test(h)),
-    room: headers.findIndex(h => /ห้อง|room/i.test(h)),
+    staff: headers.findIndex(h => /เจ้าหน้าที่|ผู้ถ่าย|ผู้ตรวจ|staff|name/i.test(h) || (/ชื่อ/i.test(h) && !/ห้อง|เครื่อง|ท่า|สาเหตุ|position|cause|room|machine|device/i.test(h))),
+    room: headers.findIndex(h => /ห้อง|เครื่อง|room|machine|device/i.test(h)),
     position: headers.findIndex(h => /ท่า|position|exam|อวัยวะ|body/i.test(h)),
     shift: headers.findIndex(h => /เวร|shift|period/i.test(h)),
     cause: headers.findIndex(h => /สาเหตุ|cause|defect/i.test(h)),
     quantity: headers.findIndex(h => /จำนวน|qty|quantity|count/i.test(h))
   };
+
+  // If settings are available, run a heuristic to resolve or verify column mappings by values
+  if (settings && dataRows.length > 0) {
+    const sampleRows = dataRows.slice(0, 30); // inspect first 30 rows
+    const numCols = Math.max(...sampleRows.map(r => r.length), headers.length);
+    
+    const scores = Array.from({ length: numCols }, () => ({
+      staff: 0,
+      room: 0,
+      position: 0,
+      shift: 0,
+      cause: 0,
+      date: 0,
+      quantity: 0
+    }));
+
+    sampleRows.forEach(row => {
+      row.forEach((cell, cIdx) => {
+        const val = cell.trim();
+        if (!val) return;
+
+        // 1. Test Date
+        if (/^\d{4}-\d{2}-\d{2}$/.test(val) || /^\d{1,2}[/\-]\d{1,2}[/\-]\d{2,4}$/.test(val)) {
+          scores[cIdx].date += 2;
+        }
+
+        // 2. Test Quantity
+        if (/^\d+$/.test(val) && parseInt(val, 10) < 50) {
+          scores[cIdx].quantity += 1.5;
+        }
+
+        // 3. Match against Settings lists
+        const lowerVal = val.toLowerCase();
+        if (settings.staffs.some(s => {
+          const lowerS = s.toLowerCase();
+          return lowerS === lowerVal || lowerVal.includes(lowerS) || lowerS.includes(lowerVal);
+        })) {
+          scores[cIdx].staff += 3;
+        }
+        if (settings.rooms.some(r => {
+          const lowerR = r.toLowerCase();
+          return lowerR === lowerVal || lowerVal.includes(lowerR) || lowerR.includes(lowerVal);
+        })) {
+          scores[cIdx].room += 3;
+        }
+        if (settings.positions.some(p => {
+          const lowerP = p.toLowerCase();
+          return lowerP === lowerVal || lowerVal.includes(lowerP) || lowerP.includes(lowerVal);
+        })) {
+          scores[cIdx].position += 3;
+        }
+        if (settings.shifts.some(s => {
+          const lowerS = s.toLowerCase();
+          return lowerS === lowerVal || lowerVal.includes(lowerS) || lowerS.includes(lowerVal);
+        })) {
+          scores[cIdx].shift += 3;
+        }
+        if (settings.causes.some(c => {
+          const lowerC = c.toLowerCase();
+          return lowerC === lowerVal || lowerVal.includes(lowerC) || lowerC.includes(lowerVal);
+        })) {
+          scores[cIdx].cause += 3;
+        }
+      });
+    });
+
+    const findBestCol = (category: keyof typeof scores[0]) => {
+      let bestIdx = -1;
+      let maxScore = 0;
+      scores.forEach((sc, idx) => {
+        if (sc[category] > maxScore) {
+          maxScore = sc[category];
+          bestIdx = idx;
+        }
+      });
+      return { index: bestIdx, score: maxScore };
+    };
+
+    // Override matched columns if scoring gives a clear winner
+    const bestDate = findBestCol('date');
+    if (bestDate.score >= 4) colIndex.date = bestDate.index;
+
+    const bestStaff = findBestCol('staff');
+    if (bestStaff.score >= 4) colIndex.staff = bestStaff.index;
+
+    const bestRoom = findBestCol('room');
+    if (bestRoom.score >= 4) colIndex.room = bestRoom.index;
+
+    const bestPosition = findBestCol('position');
+    if (bestPosition.score >= 4) colIndex.position = bestPosition.index;
+
+    const bestShift = findBestCol('shift');
+    if (bestShift.score >= 4) colIndex.shift = bestShift.index;
+
+    const bestCause = findBestCol('cause');
+    if (bestCause.score >= 4) colIndex.cause = bestCause.index;
+
+    const bestQty = findBestCol('quantity');
+    if (bestQty.score >= 4) colIndex.quantity = bestQty.index;
+  }
 
   // Fallbacks if columns are not matched (by index)
   if (colIndex.date === -1) colIndex.date = 0;
@@ -97,13 +199,8 @@ export function parseRejectRecords(rows: string[][]): RejectRecord[] {
     let dateObj: Date | null = null;
 
     if (rawDate) {
-      // Try to parse Thai / standard date formats
-      // Format: DD/MM/YYYY, YYYY-MM-DD etc.
-      // Thai dates might have Buddhist year (e.g., +543) or standard Christian year
-      // Let's write a simple robust date parser
       parsedDate = rawDate;
       try {
-        // Test format DD/MM/YYYY
         const dmyMatch = rawDate.match(/^(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})/);
         if (dmyMatch) {
           let day = parseInt(dmyMatch[1], 10);
@@ -113,7 +210,6 @@ export function parseRejectRecords(rows: string[][]): RejectRecord[] {
           dateObj = new Date(year, month, day);
           parsedDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
         } else {
-          // Try standard Date parsing
           const testD = new Date(rawDate);
           if (!isNaN(testD.getTime())) {
             dateObj = testD;
@@ -145,7 +241,7 @@ export function parseRejectRecords(rows: string[][]): RejectRecord[] {
       cause: getCell(colIndex.cause) || 'ไม่ระบุ',
       quantity,
       rawRow: row,
-      rowIndex: headerIndex + 1 + idx + 1 // 1-based row number for editing in Sheets API
+      rowIndex: headerIndex + 1 + idx + 1
     });
   });
 
@@ -167,10 +263,41 @@ export function parseSettingsConfig(rows: string[][]): SettingsConfig {
 
   if (rows.length === 0) return config;
 
-  const headers = rows[0].map(h => h.trim());
+  // Filter out completely empty rows
+  const cleanRows = rows.filter(row => row.length > 0 && row.some(cell => cell.trim() !== ''));
+  if (cleanRows.length === 0) return config;
+
+  // Find actual header row with high confidence
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(10, cleanRows.length); i++) {
+    const r = cleanRows[i].map(c => c.trim());
+    const nonCount = r.filter(c => c !== '').length;
+    
+    const hasStaff = r.some(cell => /เจ้าหน้าที่|ชื่อ|staff|user|name/i.test(cell));
+    const hasRoom = r.some(cell => /ห้อง|เครื่อง|room|machine|device/i.test(cell));
+    const hasPos = r.some(cell => /ท่า|position|exam|อวัยวะ/i.test(cell));
+    const hasShift = r.some(cell => /เวร|shift|period/i.test(cell));
+    const hasCause = r.some(cell => /สาเหตุ|cause|defect/i.test(cell));
+
+    const matchCount = [hasStaff, hasRoom, hasPos, hasShift, hasCause].filter(Boolean).length;
+    if (matchCount >= 2 || (nonCount >= 3 && headerIndex === -1)) {
+      headerIndex = i;
+      if (matchCount >= 3) {
+        break;
+      }
+    }
+  }
+
+  if (headerIndex === -1) {
+    headerIndex = 0;
+  }
+
+  const headers = cleanRows[headerIndex].map(h => h.trim());
+  const maxRowLength = Math.max(...cleanRows.map(r => r.length), 5);
+
   const colIndexes = {
-    staff: headers.findIndex(h => /เจ้าหน้าที่|ชื่อ|ผู้ตรวจ|staff|user/i.test(h)),
-    room: headers.findIndex(h => /ห้อง|room/i.test(h)),
+    staff: headers.findIndex(h => /เจ้าหน้าที่|ผู้ตรวจ|staff|user/i.test(h) || (/ชื่อ/i.test(h) && !/ห้อง|เครื่อง|ท่า|สาเหตุ|position|cause|room|machine|device/i.test(h))),
+    room: headers.findIndex(h => /ห้อง|เครื่อง|room|machine|device/i.test(h)),
     position: headers.findIndex(h => /ท่า|position|exam|อวัยวะ/i.test(h)),
     shift: headers.findIndex(h => /เวร|shift|period/i.test(h)),
     cause: headers.findIndex(h => /สาเหตุ|cause|defect/i.test(h))
@@ -178,12 +305,12 @@ export function parseSettingsConfig(rows: string[][]): SettingsConfig {
 
   // Fallbacks if not found by name, map to cols 0, 1, 2, 3, 4
   if (colIndexes.staff === -1) colIndexes.staff = 0;
-  if (colIndexes.room === -1) colIndexes.room = 1 < headers.length ? 1 : -1;
-  if (colIndexes.position === -1) colIndexes.position = 2 < headers.length ? 2 : -1;
-  if (colIndexes.shift === -1) colIndexes.shift = 3 < headers.length ? 3 : -1;
-  if (colIndexes.cause === -1) colIndexes.cause = 4 < headers.length ? 4 : -1;
+  if (colIndexes.room === -1) colIndexes.room = 1 < maxRowLength ? 1 : -1;
+  if (colIndexes.position === -1) colIndexes.position = 2 < maxRowLength ? 2 : -1;
+  if (colIndexes.shift === -1) colIndexes.shift = 3 < maxRowLength ? 3 : -1;
+  if (colIndexes.cause === -1) colIndexes.cause = 4 < maxRowLength ? 4 : -1;
 
-  const dataRows = rows.slice(1);
+  const dataRows = cleanRows.slice(headerIndex + 1);
 
   const getColList = (idx: number): string[] => {
     if (idx === -1) return [];

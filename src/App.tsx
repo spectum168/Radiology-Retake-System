@@ -37,35 +37,80 @@ import {
 
 // Gorgeous default medical radiology mock data for instantly usable Preview Mode
 const DEMO_SETTINGS: SettingsConfig = {
-  staffs: ['สมรักษ์ รังสีเทคนิค', 'เกรียงไกร สว่างเนตร', 'กิตติพงษ์ เจริญจิต', 'วิไลวรรณ มีสุข', 'ปรียานุช งามขำ'],
-  rooms: ['ห้องเอกซเรย์ทั่วไป (Room 1)', 'ห้องเอกซเรย์อุบัติเหตุ (Room 2)', 'ห้อง CT Scan 1', 'ห้องตรวจทันตรังสี'],
-  positions: ['Chest PA Upright', 'Abdomen Supine', 'Knee AP/Lat', 'C-Spine AP/Lat', 'Skull Townes/Lat', 'Hand AP/Oblique'],
+  staffs: [
+    'จนท.กุ้ง',
+    'จนท.จรัล',
+    'จนท.ตุ้ม',
+    'จนท.เต่า',
+    'จนท.ทรง',
+    'จนท.บอย',
+    'จนท.บี',
+    'จนท.ปอ',
+    'จนท.แม็ก',
+    'จนท.เอ็ม',
+    'เจ้าพนักงานรังสีการแพทย์',
+    'นักรังสีเทคนิค',
+    'พนักงานการแพทย์และรังสีเทคนิค'
+  ],
+  rooms: ['เครื่องเอกซเรย์', 'เครื่องPortable'],
+  positions: [
+    'Chest PA Upright',
+    'Chest AP',
+    'Chest Supine',
+    'Skull AP',
+    'Skull Lat',
+    'Skull water\'s',
+    'Skull Towne',
+    'Abdomen Upright',
+    'Abdomen Supine',
+    'KUB',
+    'Pelvis AP',
+    'Hip AP',
+    'Hip Lat',
+    'L-S spine AP',
+    'L-S spine Lat',
+    'T-L spine AP',
+    'T-L spine Lat',
+    'C-spine AP',
+    'C-spine Lat',
+    'Shoulder AP',
+    'Shoulder Lat',
+    'Shoulder Tran'
+  ],
   shifts: ['เช้า', 'บ่าย', 'ดึก'],
   causes: [
-    'ผู้ป่วยเคลื่อนไหว (Patient Motion)',
-    'จัดท่าตรวจผิดตำแหน่ง (Positioning Error)',
-    'ตั้งค่าปริมาณรังสีผิดพลาด (Exposure Error)',
-    'มีโลหะ/สิ่งแปลกปลอมติดตัว (Artifacts)',
-    'การล้างภาพหรือประมวลผลผิดพลาด (Processing Error)',
-    'เลือกแผ่นรับภาพผิดขนาด (Wrong Cassette/Detector)'
+    'มีโลหะ มีรอย ในภาพ',
+    'คนไข้ขยับ',
+    'ผิดคน',
+    'ผิดข้าง',
+    'ผิดตำแหน่ง',
+    'ภาพขาวไป',
+    'ภาพดำไป',
+    'ภาพขาดขอบ',
+    'จัดท่าไม่ถูก',
+    'เครื่อง CR ไม่โหลดภาพ',
+    'อื่นๆ',
+    'mark ไม่ถึงบอร์ด x-ray',
+    'ขาดซ้าย ขวา บน ล่าง',
+    'เก็บเคส สำหรับ จนท.ใหม่'
   ]
 };
 
 const DEMO_RECORDS: RejectRecord[] = [
-  { id: 'row-1', date: '2026-06-15', dateObj: new Date('2026-06-15'), staff: 'สมรักษ์ รังสีเทคนิค', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'Chest PA Upright', shift: 'เช้า', cause: 'ผู้ป่วยเคลื่อนไหว (Patient Motion)', quantity: 1, rawRow: [], rowIndex: 1 },
-  { id: 'row-2', date: '2026-06-15', dateObj: new Date('2026-06-15'), staff: 'เกรียงไกร สว่างเนตร', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'C-Spine AP/Lat', shift: 'เช้า', cause: 'จัดท่าตรวจผิดตำแหน่ง (Positioning Error)', quantity: 2, rawRow: [], rowIndex: 2 },
-  { id: 'row-3', date: '2026-06-16', dateObj: new Date('2026-06-16'), staff: 'กิตติพงษ์ เจริญจิต', room: 'ห้องเอกซเรย์อุบัติเหตุ (Room 2)', position: 'Skull Townes/Lat', shift: 'บ่าย', cause: 'ตั้งค่าปริมาณรังสีผิดพลาด (Exposure Error)', quantity: 1, rawRow: [], rowIndex: 3 },
-  { id: 'row-4', date: '2026-06-16', dateObj: new Date('2026-06-16'), staff: 'วิไลวรรณ มีสุข', room: 'ห้อง CT Scan 1', position: 'Abdomen Supine', shift: 'บ่าย', cause: 'มีโลหะ/สิ่งแปลกปลอมติดตัว (Artifacts)', quantity: 1, rawRow: [], rowIndex: 4 },
-  { id: 'row-5', date: '2026-06-17', dateObj: new Date('2026-06-17'), staff: 'ปรียานุช งามขำ', room: 'ห้องตรวจทันตรังสี', position: 'Hand AP/Oblique', shift: 'ดึก', cause: 'การล้างภาพหรือประมวลผลผิดพลาด (Processing Error)', quantity: 1, rawRow: [], rowIndex: 5 },
-  { id: 'row-6', date: '2026-06-18', dateObj: new Date('2026-06-18'), staff: 'สมรักษ์ รังสีเทคนิค', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'Chest PA Upright', shift: 'เช้า', cause: 'ผู้ป่วยเคลื่อนไหว (Patient Motion)', quantity: 1, rawRow: [], rowIndex: 6 },
-  { id: 'row-7', date: '2026-06-19', dateObj: new Date('2026-06-19'), staff: 'เกรียงไกร สว่างเนตร', room: 'ห้องเอกซเรย์อุบัติเหตุ (Room 2)', position: 'Knee AP/Lat', shift: 'ดึก', cause: 'จัดท่าตรวจผิดตำแหน่ง (Positioning Error)', quantity: 1, rawRow: [], rowIndex: 7 },
-  { id: 'row-8', date: '2026-06-20', dateObj: new Date('2026-06-20'), staff: 'วิไลวรรณ มีสุข', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'C-Spine AP/Lat', shift: 'เช้า', cause: 'ตั้งค่าปริมาณรังสีผิดพลาด (Exposure Error)', quantity: 1, rawRow: [], rowIndex: 8 },
-  { id: 'row-9', date: '2026-06-21', dateObj: new Date('2026-06-21'), staff: 'กิตติพงษ์ เจริญจิต', room: 'ห้อง CT Scan 1', position: 'Abdomen Supine', shift: 'บ่าย', cause: 'ผู้ป่วยเคลื่อนไหว (Patient Motion)', quantity: 1, rawRow: [], rowIndex: 9 },
-  { id: 'row-10', date: '2026-06-22', dateObj: new Date('2026-06-22'), staff: 'ปรียานุช งามขำ', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'Chest PA Upright', shift: 'ดึก', cause: 'เลือกแผ่นรับภาพผิดขนาด (Wrong Cassette/Detector)', quantity: 1, rawRow: [], rowIndex: 10 },
-  { id: 'row-11', date: '2026-06-23', dateObj: new Date('2026-06-23'), staff: 'สมรักษ์ รังสีเทคนิค', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'Hand AP/Oblique', shift: 'เช้า', cause: 'มีโลหะ/สิ่งแปลกปลอมติดตัว (Artifacts)', quantity: 1, rawRow: [], rowIndex: 11 },
-  { id: 'row-12', date: '2026-06-24', dateObj: new Date('2026-06-24'), staff: 'วิไลวรรณ มีสุข', room: 'ห้องตรวจทันตรังสี', position: 'Chest PA Upright', shift: 'บ่าย', cause: 'ผู้ป่วยเคลื่อนไหว (Patient Motion)', quantity: 1, rawRow: [], rowIndex: 12 },
-  { id: 'row-13', date: '2026-06-25', dateObj: new Date('2026-06-25'), staff: 'เกรียงไกร สว่างเนตร', room: 'ห้องเอกซเรย์อุบัติเหตุ (Room 2)', position: 'Knee AP/Lat', shift: 'เช้า', cause: 'จัดท่าตรวจผิดตำแหน่ง (Positioning Error)', quantity: 2, rawRow: [], rowIndex: 13 },
-  { id: 'row-14', date: '2026-06-26', dateObj: new Date('2026-06-26'), staff: 'กิตติพงษ์ เจริญจิต', room: 'ห้องเอกซเรย์ทั่วไป (Room 1)', position: 'Chest PA Upright', shift: 'ดึก', cause: 'ตั้งค่าปริมาณรังสีผิดพลาด (Exposure Error)', quantity: 1, rawRow: [], rowIndex: 14 }
+  { id: 'row-1', date: '2026-06-15', dateObj: new Date('2026-06-15'), staff: 'จนท.กุ้ง', room: 'เครื่องเอกซเรย์', position: 'Chest PA Upright', shift: 'เช้า', cause: 'คนไข้ขยับ', quantity: 1, rawRow: [], rowIndex: 1 },
+  { id: 'row-2', date: '2026-06-15', dateObj: new Date('2026-06-15'), staff: 'จนท.จรัล', room: 'เครื่องเอกซเรย์', position: 'Chest AP', shift: 'เช้า', cause: 'จัดท่าไม่ถูก', quantity: 2, rawRow: [], rowIndex: 2 },
+  { id: 'row-3', date: '2026-06-16', dateObj: new Date('2026-06-16'), staff: 'จนท.ตุ้ม', room: 'เครื่องPortable', position: 'Skull AP', shift: 'บ่าย', cause: 'มีโลหะ มีรอย ในภาพ', quantity: 1, rawRow: [], rowIndex: 3 },
+  { id: 'row-4', date: '2026-06-16', dateObj: new Date('2026-06-16'), staff: 'จนท.เต่า', room: 'เครื่องเอกซเรย์', position: 'Abdomen Upright', shift: 'บ่าย', cause: 'ภาพขาวไป', quantity: 1, rawRow: [], rowIndex: 4 },
+  { id: 'row-5', date: '2026-06-17', dateObj: new Date('2026-06-17'), staff: 'จนท.ทรง', room: 'เครื่องPortable', position: 'Pelvis AP', shift: 'ดึก', cause: 'อื่นๆ', quantity: 1, rawRow: [], rowIndex: 5 },
+  { id: 'row-6', date: '2026-06-18', dateObj: new Date('2026-06-18'), staff: 'จนท.กุ้ง', room: 'เครื่องเอกซเรย์', position: 'Chest PA Upright', shift: 'เช้า', cause: 'คนไข้ขยับ', quantity: 1, rawRow: [], rowIndex: 6 },
+  { id: 'row-7', date: '2026-06-19', dateObj: new Date('2026-06-19'), staff: 'จนท.บอย', room: 'เครื่องPortable', position: 'KUB', shift: 'ดึก', cause: 'ภาพขาดขอบ', quantity: 1, rawRow: [], rowIndex: 7 },
+  { id: 'row-8', date: '2026-06-20', dateObj: new Date('2026-06-20'), staff: 'จนท.บี', room: 'เครื่องเอกซเรย์', position: 'Hip AP', shift: 'เช้า', cause: 'ผิดคน', quantity: 1, rawRow: [], rowIndex: 8 },
+  { id: 'row-9', date: '2026-06-21', dateObj: new Date('2026-06-21'), staff: 'จนท.ปอ', room: 'เครื่องPortable', position: 'Abdomen Supine', shift: 'บ่าย', cause: 'คนไข้ขยับ', quantity: 1, rawRow: [], rowIndex: 9 },
+  { id: 'row-10', date: '2026-06-22', dateObj: new Date('2026-06-22'), staff: 'จนท.แม็ก', room: 'เครื่องเอกซเรย์', position: 'Chest PA Upright', shift: 'ดึก', cause: 'เครื่อง CR ไม่โหลดภาพ', quantity: 1, rawRow: [], rowIndex: 10 },
+  { id: 'row-11', date: '2026-06-23', dateObj: new Date('2026-06-23'), staff: 'จนท.เอ็ม', room: 'เครื่องเอกซเรย์', position: 'Shoulder AP', shift: 'เช้า', cause: 'มีโลหะ มีรอย ในภาพ', quantity: 1, rawRow: [], rowIndex: 11 },
+  { id: 'row-12', date: '2026-06-24', dateObj: new Date('2026-06-24'), staff: 'เจ้าพนักงานรังสีการแพทย์', room: 'เครื่องPortable', position: 'Chest PA Upright', shift: 'บ่าย', cause: 'คนไข้ขยับ', quantity: 1, rawRow: [], rowIndex: 12 },
+  { id: 'row-13', date: '2026-06-25', dateObj: new Date('2026-06-25'), staff: 'นักรังสีเทคนิค', room: 'เครื่องPortable', position: 'L-S spine AP', shift: 'เช้า', cause: 'จัดท่าไม่ถูก', quantity: 2, rawRow: [], rowIndex: 13 },
+  { id: 'row-14', date: '2026-06-26', dateObj: new Date('2026-06-26'), staff: 'พนักงานการแพทย์และรังสีเทคนิค', room: 'เครื่องเอกซเรย์', position: 'Chest PA Upright', shift: 'ดึก', cause: 'ภาพขาวไป', quantity: 1, rawRow: [], rowIndex: 14 }
 ];
 
 export default function App() {
@@ -118,28 +163,25 @@ export default function App() {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      // 1. Fetch reject entries
-      // We read up to 1000 rows. Adjust size if necessary.
-      const rawRejectRows = await fetchSheetRange('ข้อมูลการถ่ายภาพรังสีเสีย!A1:G1000', accessToken);
-      const parsedRecords = parseRejectRecords(rawRejectRows);
-
-      // 2. Fetch dropdown settings configs
+      // 1. Fetch dropdown settings configs first
       const rawSettingsRows = await fetchSheetRange('Settings!A1:E200', accessToken);
       const parsedSettings = parseSettingsConfig(rawSettingsRows);
 
-      setRecords(parsedRecords);
-
-      // If settings sheet is completely empty, use Demo settings as fallback
-      if (
+      // Resolve final settings to use for value-based matching and UI state
+      const finalSettings = (
         parsedSettings.staffs.length === 0 &&
         parsedSettings.rooms.length === 0 &&
         parsedSettings.positions.length === 0 &&
         parsedSettings.causes.length === 0
-      ) {
-        setSettings(DEMO_SETTINGS);
-      } else {
-        setSettings(parsedSettings);
-      }
+      ) ? DEMO_SETTINGS : parsedSettings;
+
+      setSettings(finalSettings);
+
+      // 2. Fetch reject entries using finalSettings for value matching
+      const rawRejectRows = await fetchSheetRange('ข้อมูลการถ่ายภาพรังสีเสีย!A1:G1000', accessToken);
+      const parsedRecords = parseRejectRecords(rawRejectRows, finalSettings);
+
+      setRecords(parsedRecords);
     } catch (err: any) {
       console.error('Error fetching sheets data:', err);
       setErrorMsg(
