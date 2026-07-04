@@ -805,7 +805,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
         <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#64748B' }} stroke="#CBD5E1" />
         <YAxis tick={{ fontSize: 10, fill: '#64748B' }} stroke="#CBD5E1" />
         <Tooltip 
-          content={({ active, payload }) => {
+          content={({ active, payload }: any) => {
             if (active && payload && payload.length) {
               return (
                 <div className="bg-slate-900 text-white p-3 rounded-xl text-xs shadow-xl border border-slate-800">
