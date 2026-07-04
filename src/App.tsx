@@ -22,6 +22,7 @@ import DataFilters from './components/DataFilters';
 import DashboardCharts from './components/DashboardCharts';
 import RecordTable from './components/RecordTable';
 import SettingsManager from './components/SettingsManager';
+import CsvReportManager from './components/CsvReportManager';
 import {
   Activity,
   Settings,
@@ -127,7 +128,7 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // App UI state
-  const [activeView, setActiveView] = useState<'dashboard' | 'records' | 'settings'>('dashboard');
+  const [activeView, setActiveView] = useState<'dashboard' | 'records' | 'settings' | 'csv_report'>('dashboard');
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isAddingRecord, setIsAddingRecord] = useState(false);
 
@@ -495,6 +496,18 @@ export default function App() {
             ตารางและบันทึกประวัติฟิล์มเสีย
           </button>
           <button
+            id="nav-tab-csv-report"
+            onClick={() => setActiveView('csv_report')}
+            className={`px-4 py-3 text-xs font-semibold transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
+              activeView === 'csv_report'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+            }`}
+          >
+            <FileSpreadsheet size={15} className="text-emerald-500" />
+            รายงานนำเข้าไฟล์เฉพาะ (.CSV)
+          </button>
+          <button
             id="nav-tab-settings"
             onClick={() => setActiveView('settings')}
             className={`px-4 py-3 text-xs font-semibold transition-all border-b-2 flex items-center gap-1.5 cursor-pointer ${
@@ -562,6 +575,18 @@ export default function App() {
                 onSaveSettings={handleSaveSettings}
                 isSaving={isSavingSettings}
               />
+            </motion.div>
+          )}
+
+          {activeView === 'csv_report' && (
+            <motion.div
+              key="csv-report-tab"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.18 }}
+            >
+              <CsvReportManager token={token} onGoogleSignIn={handleLogin} />
             </motion.div>
           )}
         </AnimatePresence>
