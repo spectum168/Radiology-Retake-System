@@ -215,7 +215,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      setErrorMsg('การลงชื่อเข้าใช้ด้วย Google มีปัญหา กรุณาลองใหม่อีกครั้ง');
+      setErrorMsg(`การลงชื่อเข้าใช้ด้วย Google มีปัญหา: ${err.message || 'กรุณาลองใหม่อีกครั้ง'}`);
     } finally {
       setIsLoggingIn(false);
     }

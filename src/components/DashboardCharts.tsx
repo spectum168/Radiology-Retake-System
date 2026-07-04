@@ -22,7 +22,7 @@ import {
   PolarRadiusAxis,
   Radar
 } from 'recharts';
-import { AlertCircle, Users, Activity, Layers, Calendar, BarChart2, PieChart as PieIcon, TrendingUp } from 'lucide-react';
+import { AlertCircle, Users, Activity, Layers, Calendar, BarChart2, PieChart as PieIcon, TrendingUp, Maximize2, Minimize2 } from 'lucide-react';
 
 interface DashboardChartsProps {
   records: RejectRecord[];
@@ -49,6 +49,9 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
   const [roomChartType, setRoomChartType] = useState<ChartType>('bar');
   const [positionChartType, setPositionChartType] = useState<ChartType>('bar');
   const [shiftChartType, setShiftChartType] = useState<ChartType>('pie');
+
+  // Fullscreen chart tracking
+  const [fullscreenChart, setFullscreenChart] = useState<'trend' | 'causes' | 'staff' | 'room' | 'position' | 'shift' | null>(null);
 
   // KPI Calculations
   const metrics = useMemo(() => {
@@ -196,14 +199,15 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
     const CustomTooltip = ({ active, payload }: any) => {
       if (active && payload && payload.length) {
         const item = payload[0];
+        const displayName = item.payload[nameKey] || item.name;
         return (
           <div className="bg-slate-900 text-white p-3 rounded-lg text-xs shadow-xl border border-slate-800">
-            <p className="font-medium mb-1">{item.name || item.payload[nameKey]}</p>
-            <p className="text-indigo-300">
-              จำนวน: <span className="font-bold">{item.value} ฟิล์ม</span>
+            <p className="font-bold mb-1.5 text-slate-200">{displayName}</p>
+            <p className="text-slate-400">
+              จำนวน: <span className="font-bold text-white">{item.value} ฟิล์ม</span>
             </p>
             {item.payload.percentage !== undefined && (
-              <p className="text-emerald-300 font-semibold mt-0.5">
+              <p className="text-emerald-400 font-semibold mt-1">
                 ร้อยละ: {item.payload.percentage}%
               </p>
             )}
@@ -393,20 +397,29 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
               </h4>
               <p className="text-xs text-slate-400">แสดงจำนวนภาพรังสีเสียจำแนกตามรายวัน</p>
             </div>
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              {(['area', 'line', 'bar'] as ChartType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setTrendChartType(type)}
-                  className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
-                    trendChartType === type
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {type === 'area' ? 'Area' : type === 'line' ? 'Line' : 'Bar'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                {(['area', 'line', 'bar'] as ChartType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setTrendChartType(type)}
+                    className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
+                      trendChartType === type
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {type === 'area' ? 'Area' : type === 'line' ? 'Line' : 'Bar'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFullscreenChart('trend')}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all border border-slate-100 shadow-sm"
+                title="ขยายเต็มจอ (Full Screen)"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-0">
@@ -426,20 +439,29 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
               </h4>
               <p className="text-xs text-slate-400">แสดงสัดส่วนร้อยละของแต่ละสาเหตุถ่ายภาพรังสีเสีย</p>
             </div>
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              {(['pie', 'bar', 'radar'] as ChartType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setCauseChartType(type)}
-                  className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
-                    causeChartType === type
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {type === 'pie' ? 'Pie' : type === 'bar' ? 'Bar' : 'Radar'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                {(['pie', 'bar', 'radar'] as ChartType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setCauseChartType(type)}
+                    className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
+                      causeChartType === type
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {type === 'pie' ? 'Pie' : type === 'bar' ? 'Bar' : 'Radar'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFullscreenChart('causes')}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all border border-slate-100 shadow-sm"
+                title="ขยายเต็มจอ (Full Screen)"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-0">
@@ -462,20 +484,29 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
               </h4>
               <p className="text-xs text-slate-400">เปรียบเทียบจำนวนการทำภาพเสียของเจ้าหน้าที่แต่ละคน</p>
             </div>
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              {(['bar', 'radar', 'pie'] as ChartType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setStaffChartType(type)}
-                  className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
-                    staffChartType === type
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {type === 'bar' ? 'Bar' : type === 'radar' ? 'Radar' : 'Pie'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                {(['bar', 'radar', 'pie'] as ChartType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setStaffChartType(type)}
+                    className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
+                      staffChartType === type
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {type === 'bar' ? 'Bar' : type === 'radar' ? 'Radar' : 'Pie'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFullscreenChart('staff')}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all border border-slate-100 shadow-sm"
+                title="ขยายเต็มจอ (Full Screen)"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-0">
@@ -495,20 +526,29 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
               </h4>
               <p className="text-xs text-slate-400">เปรียบเทียบฟิล์มเสียของแต่ละห้องหรือเครื่องตรวจ</p>
             </div>
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              {(['bar', 'pie'] as ChartType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setRoomChartType(type)}
-                  className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
-                    roomChartType === type
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {type === 'bar' ? 'Bar' : 'Pie'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                {(['bar', 'pie'] as ChartType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setRoomChartType(type)}
+                    className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
+                      roomChartType === type
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {type === 'bar' ? 'Bar' : 'Pie'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFullscreenChart('room')}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all border border-slate-100 shadow-sm"
+                title="ขยายเต็มจอ (Full Screen)"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-0">
@@ -531,20 +571,29 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
               </h4>
               <p className="text-xs text-slate-400">แสดงสัดส่วนความถี่ท่าตรวจหรืออวัยวะที่ถ่ายเสียสูงสุด</p>
             </div>
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              {(['bar', 'radar'] as ChartType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setPositionChartType(type)}
-                  className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
-                    positionChartType === type
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {type === 'bar' ? 'Bar' : 'Radar'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                {(['bar', 'radar'] as ChartType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setPositionChartType(type)}
+                    className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
+                      positionChartType === type
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {type === 'bar' ? 'Bar' : 'Radar'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFullscreenChart('position')}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all border border-slate-100 shadow-sm"
+                title="ขยายเต็มจอ (Full Screen)"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-0">
@@ -564,20 +613,29 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
               </h4>
               <p className="text-xs text-slate-400">เปรียบเทียบสัดส่วนและจำนวนฟิล์มเสียจำแนกตามกะหรือเวร</p>
             </div>
-            <div className="flex bg-slate-100 rounded-lg p-0.5">
-              {(['pie', 'bar'] as ChartType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setShiftChartType(type)}
-                  className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
-                    shiftChartType === type
-                      ? 'bg-white text-slate-800 shadow-sm'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {type === 'pie' ? 'Pie' : 'Bar'}
-                </button>
-              ))}
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 rounded-lg p-0.5">
+                {(['pie', 'bar'] as ChartType[]).map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setShiftChartType(type)}
+                    className={`text-[10px] px-2 py-1 rounded-md font-semibold capitalize transition-all ${
+                      shiftChartType === type
+                        ? 'bg-white text-slate-800 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {type === 'pie' ? 'Pie' : 'Bar'}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setFullscreenChart('shift')}
+                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-all border border-slate-100 shadow-sm"
+                title="ขยายเต็มจอ (Full Screen)"
+              >
+                <Maximize2 size={14} />
+              </button>
             </div>
           </div>
           <div className="flex-1 w-full min-h-0">
@@ -587,6 +645,161 @@ export default function DashboardCharts({ records }: DashboardChartsProps) {
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Overlay Modal */}
+      {fullscreenChart && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 md:p-6 transition-all duration-300">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col p-6 relative animate-in fade-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6 border-b border-slate-100 pb-4">
+              <div>
+                <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  {fullscreenChart === 'trend' && <><TrendingUp size={20} className="text-blue-600" /> กราฟแนวโน้มภาพรวมรายวัน (Overall Daily Trend)</>}
+                  {fullscreenChart === 'causes' && <><AlertCircle size={20} className="text-blue-600" /> กราฟแยกตามสาเหตุเสีย & ร้อยละ (Causes Breakdown)</>}
+                  {fullscreenChart === 'staff' && <><Users size={20} className="text-blue-600" /> กราฟเปรียบเทียบรายบุคคล (Individual Comparison)</>}
+                  {fullscreenChart === 'room' && <><Layers size={20} className="text-blue-600" /> กราฟแยกตามชื่อห้อง/เครื่องรังสี (Room Comparison)</>}
+                  {fullscreenChart === 'position' && <><Activity size={20} className="text-blue-600" /> กราฟแยกตาม Position / ท่าตรวจ (Top 10)</>}
+                  {fullscreenChart === 'shift' && <><Calendar size={20} className="text-blue-600" /> กราฟแยกตามเวรปฏิบัติงาน (Shift Breakdown)</>}
+                </h4>
+                <p className="text-xs text-slate-500 mt-1">
+                  {fullscreenChart === 'trend' && 'แสดงจำนวนภาพรังสีเสียจำแนกตามรายวัน'}
+                  {fullscreenChart === 'causes' && 'แสดงสัดส่วนร้อยละของแต่ละสาเหตุถ่ายภาพรังสีเสีย'}
+                  {fullscreenChart === 'staff' && 'เปรียบเทียบจำนวนการทำภาพเสียของเจ้าหน้าที่แต่ละคน'}
+                  {fullscreenChart === 'room' && 'เปรียบเทียบฟิล์มเสียของแต่ละห้องหรือเครื่องตรวจ'}
+                  {fullscreenChart === 'position' && 'แสดงสัดส่วนความถี่ท่าตรวจหรืออวัยวะที่ถ่ายเสียสูงสุด'}
+                  {fullscreenChart === 'shift' && 'เปรียบเทียบสัดส่วนและจำนวนฟิล์มเสียจำแนกตามกะหรือเวร'}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                {/* Embedded controls inside modal */}
+                {fullscreenChart === 'trend' && (
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                    {(['area', 'line', 'bar'] as ChartType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setTrendChartType(type)}
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                          trendChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'area' ? 'Area' : type === 'line' ? 'Line' : 'Bar'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {fullscreenChart === 'causes' && (
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                    {(['pie', 'bar', 'radar'] as ChartType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setCauseChartType(type)}
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                          causeChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'pie' ? 'Pie' : type === 'bar' ? 'Bar' : 'Radar'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {fullscreenChart === 'staff' && (
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                    {(['bar', 'radar', 'pie'] as ChartType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setStaffChartType(type)}
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                          staffChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'bar' ? 'Bar' : type === 'radar' ? 'Radar' : 'Pie'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {fullscreenChart === 'room' && (
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                    {(['bar', 'pie'] as ChartType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setRoomChartType(type)}
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                          roomChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'bar' ? 'Bar' : 'Pie'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {fullscreenChart === 'position' && (
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                    {(['bar', 'radar'] as ChartType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setPositionChartType(type)}
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                          positionChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'bar' ? 'Bar' : 'Radar'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {fullscreenChart === 'shift' && (
+                  <div className="flex bg-slate-100 rounded-lg p-0.5 mr-2">
+                    {(['pie', 'bar'] as ChartType[]).map(type => (
+                      <button
+                        key={type}
+                        onClick={() => setShiftChartType(type)}
+                        className={`text-xs px-2.5 py-1 rounded-md font-semibold capitalize transition-all ${
+                          shiftChartType === type
+                            ? 'bg-white text-slate-800 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-800'
+                        }`}
+                      >
+                        {type === 'pie' ? 'Pie' : 'Bar'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  onClick={() => setFullscreenChart(null)}
+                  className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-800 transition-all flex items-center gap-1 text-xs font-semibold border border-slate-200 shadow-sm"
+                  title="ย่อกลับ (Exit Full Screen)"
+                >
+                  <Minimize2 size={16} />
+                  <span className="hidden sm:inline">ย่อหน้าจอ</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Content Chart Container */}
+            <div className="flex-1 w-full min-h-0 bg-slate-50 rounded-xl p-4 md:p-6 border border-slate-100">
+              <ResponsiveContainer width="100%" height="100%">
+                {fullscreenChart === 'trend' && renderChart(trendData, trendChartType, 'count', 'date', '#2563EB')}
+                {fullscreenChart === 'causes' && renderChart(causeData, causeChartType, 'value', 'name', '#34D399')}
+                {fullscreenChart === 'staff' && renderChart(staffData, staffChartType, 'value', 'name', '#2563EB')}
+                {fullscreenChart === 'room' && renderChart(roomData, roomChartType, 'value', 'name', '#38BDF8')}
+                {fullscreenChart === 'position' && renderChart(positionData, positionChartType, 'value', 'name', '#818CF8')}
+                {fullscreenChart === 'shift' && renderChart(shiftData, shiftChartType, 'value', 'name', '#F59E0B')}
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
