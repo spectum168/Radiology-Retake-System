@@ -96,13 +96,7 @@ export interface UploadedCsvFile {
   isActive: boolean;
 }
 
-export interface GoogleDriveFile {
-  id: string;
-  name: string;
-  mimeType: string;
-  modifiedTime?: string;
-  size?: string;
-}
+
 
 // Map shift based on custom rules:
 // 8:01-16:00 = เวรเช้า
@@ -229,13 +223,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
   const [selectedCompareReasons, setSelectedCompareReasons] = useState<string[]>([]);
   const [compareChartType, setCompareChartType] = useState<'line' | 'bar'>('line');
 
-  // Google Drive states
-  const [isDriveModalOpen, setIsDriveModalOpen] = useState(false);
-  const [driveFiles, setDriveFiles] = useState<GoogleDriveFile[]>([]);
-  const [isFetchingDrive, setIsFetchingDrive] = useState(false);
-  const [driveSearchQuery, setDriveSearchQuery] = useState('');
-  const [driveError, setDriveError] = useState<string | null>(null);
-  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+
 
   // Load from local storage
   useEffect(() => {
@@ -504,91 +492,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
     }
   };
 
-  // Google Drive: Fetch files lists
-  const fetchGoogleDriveCsvFiles = async (query = '') => {
-    if (!token) return;
-    setIsFetchingDrive(true);
-    setDriveError(null);
-    try {
-      // Build Google Drive files list API query
-      // mimeType = 'text/csv' to find CSV files, not trashed
-      let q = "mimeType = 'text/csv' and trashed = false";
-      if (query.trim()) {
-        const escapedQuery = query.replace(/'/g, "\\'");
-        q += ` and name contains '${escapedQuery}'`;
-      }
-      
-      const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,mimeType,modifiedTime,size)&pageSize=40`;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json'
-        }
-      });
 
-      if (!res.ok) {
-        throw new Error(`เกิดข้อผิดพลาดในการติดต่อ Google Drive: ${res.statusText} (${res.status})`);
-      }
-
-      const data = await res.json();
-      setDriveFiles(data.files || []);
-    } catch (err: any) {
-      console.error('Drive files fetch error:', err);
-      setDriveError(err.message || 'ไม่สามารถดึงข้อมูลรายการไฟล์รังสีจาก Google Drive ได้');
-    } finally {
-      setIsFetchingDrive(false);
-    }
-  };
-
-  // Google Drive: Select and download a specific file
-  const handleSelectDriveFile = async (fileId: string, fileName: string) => {
-    if (!token) return;
-    setDownloadingFileId(fileId);
-    setDriveError(null);
-    try {
-      const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!res.ok) {
-        throw new Error(`ดาวน์โหลดไฟล์ไม่สำเร็จ: ${res.statusText}`);
-      }
-
-      const text = await res.text();
-      const parsedFile = parseCsvContent(text, fileName);
-      
-      setFiles(prev => {
-        const updated = [parsedFile, ...prev];
-        localStorage.setItem('radiology_uploaded_csv_files', JSON.stringify(updated));
-        return updated;
-      });
-      setSuccessMsg(`นำเข้าไฟล์ "${fileName}" สำเร็จ! ตรวจพบข้อมูลเสีย ${parsedFile.records.length} รายการ`);
-
-      // Update default date range filters from the new file data
-      const dates = parsedFile.records.map(r => r.dateStr).filter(d => d && d.match(/^\d{4}-\d{2}-\d{2}$/));
-      if (dates.length > 0) {
-        const sorted = [...dates].sort();
-        if (!startDate || sorted[0] < startDate) setStartDate(sorted[0]);
-        if (!endDate || sorted[sorted.length - 1] > endDate) setEndDate(sorted[sorted.length - 1]);
-      }
-      setIsDriveModalOpen(false);
-    } catch (err: any) {
-      console.error('Drive download error:', err);
-      setDriveError(`ดาวน์โหลดไฟล์ "${fileName}" ล้มเหลว: ${err.message}`);
-    } finally {
-      setDownloadingFileId(null);
-    }
-  };
-
-  // Trigger loading list when Drive modal is opened
-  useEffect(() => {
-    if (isDriveModalOpen && token) {
-      fetchGoogleDriveCsvFiles();
-    }
-  }, [isDriveModalOpen, token]);
 
   const handleDeleteFile = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1204,7 +1108,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
             </h3>
             
             <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto leading-relaxed">
-              ลากไฟล์ CSV มาวางที่นี่ เลือกจากเครื่อง หรือดึงข้อมูลโดยตรงจาก Google Drive ของคุณ
+              ลากไฟล์ CSV หลายไฟล์มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์จากเครื่องคอมพิวเตอร์ของคุณ
             </p>
 
             <div className="mt-4 flex flex-wrap gap-2 justify-center">
@@ -1214,28 +1118,6 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
               >
                 <Plus size={14} />
                 เลือกไฟล์จากเครื่อง
-              </button>
-
-              <button
-                onClick={() => {
-                  if (token) {
-                    setIsDriveModalOpen(true);
-                  } else {
-                    onGoogleSignIn().then(() => {
-                      setIsDriveModalOpen(true);
-                    }).catch(err => {
-                      alert(`ไม่สามารถเชื่อมต่อ Google Drive: ${err.message}`);
-                    });
-                  }
-                }}
-                className={`text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-1.5 transition-all shadow-sm cursor-pointer border ${
-                  token 
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100/70' 
-                    : 'bg-slate-800 hover:bg-slate-900 text-white border-transparent'
-                }`}
-              >
-                <Database size={14} className={token ? 'text-emerald-600' : 'text-blue-400'} />
-                {token ? 'เปิดจาก Google Drive (เชื่อมต่อแล้ว)' : 'เชื่อมต่อ Google Drive'}
               </button>
               
               <button
@@ -1337,148 +1219,7 @@ export default function CsvReportManager({ token, onGoogleSignIn }: CsvReportMan
 
       </div>
 
-      {/* Google Drive Picker Modal */}
-      <AnimatePresence>
-        {isDriveModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl h-[550px] flex flex-col overflow-hidden"
-            >
-              {/* Header */}
-              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <div className="flex items-center gap-2">
-                  <Database className="text-emerald-600" size={18} />
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-800">เลือกไฟล์ CSV จาก Google Drive</h3>
-                    <p className="text-[10px] text-slate-400">แสดงเฉพาะไฟล์ CSV (.csv) ใน Google Drive ของคุณ</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsDriveModalOpen(false)}
-                  className="p-1.5 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-700 transition-all cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
 
-              {/* Search Bar / Controls */}
-              <div className="p-4 border-b border-slate-100 flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Search size={14} className="absolute left-3 top-3 text-slate-400" />
-                  <input
-                    type="text"
-                    value={driveSearchQuery}
-                    onChange={(e) => setDriveSearchQuery(e.target.value)}
-                    placeholder="ค้นหาชื่อไฟล์รังสีวิทยาในไดรฟ์..."
-                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:outline-none focus:bg-white focus:ring-1 focus:ring-blue-500"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') fetchGoogleDriveCsvFiles(driveSearchQuery);
-                    }}
-                  />
-                </div>
-                <button
-                  onClick={() => fetchGoogleDriveCsvFiles(driveSearchQuery)}
-                  className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all flex items-center gap-1.5 text-xs font-semibold cursor-pointer shadow-sm"
-                  title="ค้นหา"
-                >
-                  <Search size={14} />
-                  ค้นหา
-                </button>
-                <button
-                  onClick={() => fetchGoogleDriveCsvFiles(driveSearchQuery)}
-                  className="p-2 border border-slate-200 text-slate-500 hover:bg-slate-50 rounded-xl transition-all cursor-pointer"
-                  title="รีเฟรชข้อมูล"
-                >
-                  <RefreshCw size={14} className={isFetchingDrive ? 'animate-spin' : ''} />
-                </button>
-              </div>
-
-              {/* Main files listing content */}
-              <div className="flex-1 overflow-y-auto p-4 bg-slate-50">
-                {isFetchingDrive ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-500">
-                    <RefreshCw className="animate-spin text-blue-500 mb-3" size={24} />
-                    <p className="text-xs font-semibold">กำลังเชื่อมต่อและโหลดรายชื่อไฟล์ใน Google Drive...</p>
-                  </div>
-                ) : driveError ? (
-                  <div className="bg-red-50 border border-red-100 p-4 rounded-xl text-xs text-red-700 flex flex-col gap-2 m-2">
-                    <div className="flex items-start gap-2">
-                      <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                      <span>{driveError}</span>
-                    </div>
-                    <button
-                      onClick={() => fetchGoogleDriveCsvFiles(driveSearchQuery)}
-                      className="text-xs font-semibold underline text-red-800 self-start hover:text-red-950 mt-1"
-                    >
-                      ลองใหม่อีกครั้ง
-                    </button>
-                  </div>
-                ) : driveFiles.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400">
-                    <FileSpreadsheet size={32} className="text-slate-300 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600">ไม่พบไฟล์รายงานรังสีวิทยา (.csv) ใน Google Drive ของคุณ</p>
-                    <p className="text-[10px] text-slate-400 mt-1 max-w-xs mx-auto">
-                      กรุณาตรวจสอบว่ามีไฟล์ CSV บันทึกสถิติภาพเสียถูกเก็บไว้ และลองค้นหาด้วยคำสำคัญในช่องค้นหาด้านบน
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-2">
-                    {driveFiles.map(file => {
-                      const isDownloading = downloadingFileId === file.id;
-                      return (
-                        <div
-                          key={file.id}
-                          onClick={() => !isDownloading && handleSelectDriveFile(file.id, file.name)}
-                          className={`p-3 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/20 transition-all flex items-center justify-between cursor-pointer ${
-                            isDownloading ? 'opacity-70 pointer-events-none border-blue-200 bg-blue-50/10' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className="p-2 bg-emerald-50 text-emerald-600 rounded-lg border border-emerald-100">
-                              <FileSpreadsheet size={16} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-700 truncate" title={file.name}>
-                                {file.name}
-                              </p>
-                              <p className="text-[9px] text-slate-400 mt-0.5 flex items-center gap-1.5">
-                                <span>ขนาด: {formatBytes(file.size) || 'ไม่ระบุ'}</span>
-                                <span>•</span>
-                                <span>แก้ไขล่าสุด: {file.modifiedTime ? new Date(file.modifiedTime).toLocaleString('th-TH') : 'ไม่ระบุ'}</span>
-                              </p>
-                            </div>
-                          </div>
-
-                          <div>
-                            {isDownloading ? (
-                              <RefreshCw className="animate-spin text-blue-500" size={14} />
-                            ) : (
-                              <span className="text-[10px] font-bold text-blue-600 hover:underline">
-                                นำเข้าข้อมูล
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="p-4 border-t border-slate-100 flex items-center justify-between bg-slate-50 text-[10px] text-slate-400">
-                <span className="flex items-center gap-1">
-                  <Lock size={12} className="text-emerald-600" /> Secure Sandbox Connection
-                </span>
-                <span>พบทั้งหมด {driveFiles.length} รายการ</span>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Operation Messages Notifications */}
       {errorMsg && (
